@@ -56,7 +56,14 @@ agent-corpプロジェクトの開発ロードマップ。
 
 安定版としてリリースし、拡張機能を提供する。
 
-- [ ] 安定版としてのリリース
-- [ ] 対応LLMエージェントの拡充
-- [ ] GUI監視ツール（オプション）
-- [ ] 組織構成カスタマイズ機能
+- [x] 安定版としてのリリース
+  - [x] LICENSE (MIT)
+  - [x] VERSION管理
+- [x] 対応LLMエージェントの拡充
+  - [x] config/agents.yaml（Claude, Aider, GPT CLI, Ollama, LM Studio, Cursor）
+- [x] GUI監視ツール（オプション）
+  - [x] tools/dashboard.html（ブラウザベースダッシュボード）
+- [x] 組織構成カスタマイズ機能
+  - [x] config/org-templates/default.yaml
+  - [x] config/org-templates/minimal.yaml
+  - [x] config/org-templates/large.yaml

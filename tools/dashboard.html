@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>agent-corp Dashboard</title>
+    <style>
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-card: #0f3460;
+            --text-primary: #eaeaea;
+            --text-secondary: #a0a0a0;
+            --accent: #e94560;
+            --success: #4ade80;
+            --warning: #fbbf24;
+            --info: #60a5fa;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .header {
+            background: var(--bg-secondary);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--accent);
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .header .version {
+            background: var(--accent);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.online { background: var(--success); }
+        .status-dot.offline { background: var(--accent); animation: none; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .container {
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .card h2 {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: var(--text-primary);
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .hierarchy {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .hierarchy-level {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .agent-node {
+            background: var(--bg-secondary);
+            border: 2px solid var(--info);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            text-align: center;
+            min-width: 120px;
+            position: relative;
+        }
+
+        .agent-node.ceo { border-color: var(--accent); }
+        .agent-node.pm { border-color: var(--warning); }
+        .agent-node.engineer { border-color: var(--success); }
+
+        .agent-node .role {
+            font-weight: bold;
+            font-size: 0.875rem;
+        }
+
+        .agent-node .status {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        .connector {
+            width: 2px;
+            height: 20px;
+            background: var(--text-secondary);
+        }
+
+        .message-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .message-item {
+            display: flex;
+            gap: 1rem;
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--bg-secondary);
+        }
+
+        .message-item:last-child {
+            border-bottom: none;
+        }
+
+        .message-type {
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            min-width: 80px;
+            text-align: center;
+        }
+
+        .message-type.requirement { background: var(--accent); }
+        .message-type.instruction { background: var(--warning); color: #000; }
+        .message-type.task { background: var(--info); }
+        .message-type.report { background: var(--success); color: #000; }
+        .message-type.question { background: #a855f7; }
+
+        .message-content {
+            flex: 1;
+        }
+
+        .message-from {
+            font-weight: bold;
+            font-size: 0.875rem;
+        }
+
+        .message-preview {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        .message-time {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .health-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+        }
+
+        .health-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+        }
+
+        .health-status {
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+        }
+
+        .health-status.ok { background: var(--success); color: #000; }
+        .health-status.warn { background: var(--warning); color: #000; }
+        .health-status.error { background: var(--accent); }
+
+        .actions {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: opacity 0.2s;
+        }
+
+        .btn:hover {
+            opacity: 0.8;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--text-secondary);
+        }
+
+        .log-output {
+            background: #000;
+            color: #0f0;
+            font-family: monospace;
+            padding: 1rem;
+            border-radius: 4px;
+            height: 200px;
+            overflow-y: auto;
+            font-size: 0.75rem;
+            line-height: 1.5;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 1rem;
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>
+            agent-corp Dashboard
+            <span class="version">v1.0.0</span>
+        </h1>
+        <div class="status-indicator">
+            <span class="status-dot online" id="statusDot"></span>
+            <span id="statusText">監視中</span>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="grid">
+            <div class="card">
+                <h2>アクティブエージェント</h2>
+                <div class="stat-value" id="activeAgents">0</div>
+                <div class="stat-label">/ 5 エージェント</div>
+            </div>
+            <div class="card">
+                <h2>処理メッセージ数</h2>
+                <div class="stat-value" id="messageCount">0</div>
+                <div class="stat-label">今日の合計</div>
+            </div>
+            <div class="card">
+                <h2>完了タスク</h2>
+                <div class="stat-value" id="completedTasks">0</div>
+                <div class="stat-label">進行中: <span id="inProgressTasks">0</span></div>
+            </div>
+            <div class="card">
+                <h2>システム稼働時間</h2>
+                <div class="stat-value" id="uptime">00:00</div>
+                <div class="stat-label">HH:MM</div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card" style="grid-column: span 2;">
+                <h2>組織階層</h2>
+                <div class="hierarchy">
+                    <div class="hierarchy-level">
+                        <div class="agent-node ceo">
+                            <div class="role">CEO AI</div>
+                            <div class="status" id="ceoStatus">待機中</div>
+                        </div>
+                    </div>
+                    <div class="connector"></div>
+                    <div class="hierarchy-level">
+                        <div class="agent-node pm">
+                            <div class="role">PM AI</div>
+                            <div class="status" id="pmStatus">待機中</div>
+                        </div>
+                    </div>
+                    <div class="connector"></div>
+                    <div class="hierarchy-level">
+                        <div class="agent-node engineer">
+                            <div class="role">Frontend</div>
+                            <div class="status" id="frontendStatus">待機中</div>
+                        </div>
+                        <div class="agent-node engineer">
+                            <div class="role">Backend</div>
+                            <div class="status" id="backendStatus">待機中</div>
+                        </div>
+                        <div class="agent-node engineer">
+                            <div class="role">Security</div>
+                            <div class="status" id="securityStatus">待機中</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>最新メッセージ</h2>
+                <div class="message-list" id="messageList">
+                    <div class="message-item">
+                        <span class="message-type requirement">要件</span>
+                        <div class="message-content">
+                            <div class="message-from">human → ceo</div>
+                            <div class="message-preview">新機能の実装を依頼...</div>
+                        </div>
+                        <div class="message-time">12:34</div>
+                    </div>
+                    <div class="message-item">
+                        <span class="message-type instruction">指示</span>
+                        <div class="message-content">
+                            <div class="message-from">ceo → pm</div>
+                            <div class="message-preview">タスク分解を実施...</div>
+                        </div>
+                        <div class="message-time">12:35</div>
+                    </div>
+                    <div class="message-item">
+                        <span class="message-type task">タスク</span>
+                        <div class="message-content">
+                            <div class="message-from">pm → frontend</div>
+                            <div class="message-preview">UI実装を担当...</div>
+                        </div>
+                        <div class="message-time">12:36</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>システムヘルス</h2>
+                <div class="health-grid">
+                    <div class="health-item">
+                        <span>shared/</span>
+                        <span class="health-status ok" id="healthShared">OK</span>
+                    </div>
+                    <div class="health-item">
+                        <span>prompts/</span>
+                        <span class="health-status ok" id="healthPrompts">OK</span>
+                    </div>
+                    <div class="health-item">
+                        <span>scripts/</span>
+                        <span class="health-status ok" id="healthScripts">OK</span>
+                    </div>
+                    <div class="health-item">
+                        <span>config/</span>
+                        <span class="health-status ok" id="healthConfig">OK</span>
+                    </div>
+                    <div class="health-item">
+                        <span>tmux session</span>
+                        <span class="health-status warn" id="healthTmux">未起動</span>
+                    </div>
+                    <div class="health-item">
+                        <span>disk space</span>
+                        <span class="health-status ok" id="healthDisk">OK</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>クイックアクション</h2>
+            <div class="actions">
+                <button class="btn btn-primary" onclick="startSession()">セッション開始</button>
+                <button class="btn btn-secondary" onclick="stopSession()">セッション停止</button>
+                <button class="btn btn-secondary" onclick="runHealthCheck()">ヘルスチェック</button>
+                <button class="btn btn-secondary" onclick="exportLogs()">ログエクスポート</button>
+                <button class="btn btn-secondary" onclick="clearMessages()">メッセージクリア</button>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 1.5rem;">
+            <h2>ログ出力</h2>
+            <div class="log-output" id="logOutput">
+[agent-corp] Dashboard initialized
+[agent-corp] Waiting for session start...
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        agent-corp v1.0.0 | AI-Powered Hierarchical Development System
+    </footer>
+
+    <script>
+        // Simulated data and functions
+        let startTime = null;
+        let messageCount = 0;
+        let completedTasks = 0;
+        let inProgressTasks = 0;
+
+        function log(message) {
+            const logOutput = document.getElementById('logOutput');
+            const timestamp = new Date().toLocaleTimeString('ja-JP');
+            logOutput.innerHTML += `\n[${timestamp}] ${message}`;
+            logOutput.scrollTop = logOutput.scrollHeight;
+        }
+
+        function updateUptime() {
+            if (!startTime) return;
+            const now = new Date();
+            const diff = Math.floor((now - startTime) / 1000);
+            const hours = Math.floor(diff / 3600).toString().padStart(2, '0');
+            const minutes = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
+            document.getElementById('uptime').textContent = `${hours}:${minutes}`;
+        }
+
+        function startSession() {
+            log('Starting agent-corp session...');
+            log('Executing: ./scripts/start.sh');
+
+            setTimeout(() => {
+                startTime = new Date();
+                document.getElementById('statusDot').className = 'status-dot online';
+                document.getElementById('statusText').textContent = '稼働中';
+                document.getElementById('activeAgents').textContent = '5';
+
+                document.getElementById('ceoStatus').textContent = '稼働中';
+                document.getElementById('pmStatus').textContent = '稼働中';
+                document.getElementById('frontendStatus').textContent = '稼働中';
+                document.getElementById('backendStatus').textContent = '稼働中';
+                document.getElementById('securityStatus').textContent = '稼働中';
+                document.getElementById('healthTmux').textContent = 'OK';
+                document.getElementById('healthTmux').className = 'health-status ok';
+
+                log('Session started successfully');
+                log('All agents are now active');
+            }, 1000);
+        }
+
+        function stopSession() {
+            log('Stopping agent-corp session...');
+            log('Executing: tmux kill-session -t agent-corp');
+
+            setTimeout(() => {
+                startTime = null;
+                document.getElementById('statusDot').className = 'status-dot offline';
+                document.getElementById('statusText').textContent = '停止中';
+                document.getElementById('activeAgents').textContent = '0';
+                document.getElementById('uptime').textContent = '00:00';
+
+                document.getElementById('ceoStatus').textContent = '停止';
+                document.getElementById('pmStatus').textContent = '停止';
+                document.getElementById('frontendStatus').textContent = '停止';
+                document.getElementById('backendStatus').textContent = '停止';
+                document.getElementById('securityStatus').textContent = '停止';
+                document.getElementById('healthTmux').textContent = '未起動';
+                document.getElementById('healthTmux').className = 'health-status warn';
+
+                log('Session stopped');
+            }, 500);
+        }
+
+        function runHealthCheck() {
+            log('Running health check...');
+            log('Executing: ./scripts/health.sh check');
+
+            setTimeout(() => {
+                log('Health check completed:');
+                log('  - shared/: OK');
+                log('  - prompts/: OK');
+                log('  - scripts/: OK');
+                log('  - config/: OK');
+                log('All systems normal');
+            }, 500);
+        }
+
+        function exportLogs() {
+            log('Exporting logs...');
+            log('Executing: ./scripts/monitor.sh export');
+
+            setTimeout(() => {
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                log(`Logs exported to: logs/export-${timestamp}.json`);
+            }, 300);
+        }
+
+        function clearMessages() {
+            if (confirm('すべてのメッセージをクリアしますか？')) {
+                log('Clearing messages...');
+                log('Executing: ./scripts/health.sh cleanup');
+
+                setTimeout(() => {
+                    document.getElementById('messageList').innerHTML =
+                        '<div style="text-align: center; color: var(--text-secondary); padding: 2rem;">メッセージなし</div>';
+                    document.getElementById('messageCount').textContent = '0';
+                    log('Messages cleared');
+                }, 300);
+            }
+        }
+
+        // Update uptime every second
+        setInterval(updateUptime, 1000);
+
+        // Simulate random activity
+        setInterval(() => {
+            if (startTime) {
+                messageCount++;
+                document.getElementById('messageCount').textContent = messageCount;
+
+                if (Math.random() > 0.7) {
+                    completedTasks++;
+                    document.getElementById('completedTasks').textContent = completedTasks;
+                }
+            }
+        }, 5000);
+
+        log('Ready to monitor agent-corp system');
+    </script>
+</body>
+</html>

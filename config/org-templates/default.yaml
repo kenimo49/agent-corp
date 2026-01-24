@@ -1,0 +1,69 @@
+# デフォルト組織構成テンプレート
+# CEO → PM → Engineers (Frontend, Backend, Security)
+
+name: "Default Organization"
+description: "標準的な3層階層構造（CEO → PM → 3 Engineers）"
+
+hierarchy:
+  - role: ceo
+    reports_to: human
+    subordinates:
+      - pm
+
+  - role: pm
+    reports_to: ceo
+    subordinates:
+      - frontend
+      - backend
+      - security
+
+  - role: frontend
+    reports_to: pm
+    subordinates: []
+
+  - role: backend
+    reports_to: pm
+    subordinates: []
+
+  - role: security
+    reports_to: pm
+    subordinates: []
+
+communication:
+  # メッセージフロー
+  flows:
+    - from: human
+      to: ceo
+      types: [requirement]
+
+    - from: ceo
+      to: pm
+      types: [instruction]
+
+    - from: pm
+      to: [frontend, backend, security]
+      types: [task]
+
+    - from: [frontend, backend, security]
+      to: pm
+      types: [report, question]
+
+    - from: pm
+      to: ceo
+      types: [report]
+
+    - from: ceo
+      to: human
+      types: [report]
+
+tmux:
+  windows:
+    - name: ceo
+      roles: [ceo]
+    - name: pm
+      roles: [pm]
+    - name: engineers
+      layout: main-vertical
+      roles: [frontend, backend, security]
+    - name: monitor
+      command: "watch -n 2 'ls -la shared/'"

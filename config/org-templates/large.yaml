@@ -1,0 +1,161 @@
+# 大規模組織構成テンプレート
+# CEO → CTO/CPO → PM → Engineers
+
+name: "Large Organization"
+description: "大規模構成（CEO → CTO/CPO → 複数PM → 複数Engineers）"
+
+hierarchy:
+  - role: ceo
+    reports_to: human
+    subordinates:
+      - cto
+      - cpo
+
+  - role: cto
+    reports_to: ceo
+    subordinates:
+      - pm_backend
+      - pm_infra
+
+  - role: cpo
+    reports_to: ceo
+    subordinates:
+      - pm_frontend
+
+  - role: pm_frontend
+    reports_to: cpo
+    subordinates:
+      - frontend_senior
+      - frontend_junior
+      - ui_designer
+
+  - role: pm_backend
+    reports_to: cto
+    subordinates:
+      - backend_senior
+      - backend_junior
+      - dba
+
+  - role: pm_infra
+    reports_to: cto
+    subordinates:
+      - devops
+      - security
+      - sre
+
+# カスタムロール定義
+custom_roles:
+  cto:
+    name: "CTO AI"
+    prompt: "prompts/executives/cto.md"
+    description: "技術戦略・アーキテクチャ"
+
+  cpo:
+    name: "CPO AI"
+    prompt: "prompts/executives/cpo.md"
+    description: "プロダクト戦略・UX"
+
+  pm_frontend:
+    name: "Frontend PM AI"
+    prompt: "prompts/pm-frontend.md"
+    description: "フロントエンドチーム管理"
+
+  pm_backend:
+    name: "Backend PM AI"
+    prompt: "prompts/pm-backend.md"
+    description: "バックエンドチーム管理"
+
+  pm_infra:
+    name: "Infrastructure PM AI"
+    prompt: "prompts/pm-infra.md"
+    description: "インフラチーム管理"
+
+  frontend_senior:
+    name: "Senior Frontend Engineer AI"
+    prompt: "prompts/engineers/frontend-senior.md"
+    description: "シニアフロントエンド"
+
+  frontend_junior:
+    name: "Junior Frontend Engineer AI"
+    prompt: "prompts/engineers/frontend-junior.md"
+    description: "ジュニアフロントエンド"
+
+  ui_designer:
+    name: "UI Designer AI"
+    prompt: "prompts/engineers/ui-designer.md"
+    description: "UIデザイン"
+
+  backend_senior:
+    name: "Senior Backend Engineer AI"
+    prompt: "prompts/engineers/backend-senior.md"
+    description: "シニアバックエンド"
+
+  backend_junior:
+    name: "Junior Backend Engineer AI"
+    prompt: "prompts/engineers/backend-junior.md"
+    description: "ジュニアバックエンド"
+
+  dba:
+    name: "DBA AI"
+    prompt: "prompts/engineers/dba.md"
+    description: "データベース管理"
+
+  devops:
+    name: "DevOps Engineer AI"
+    prompt: "prompts/engineers/devops.md"
+    description: "CI/CD、自動化"
+
+  sre:
+    name: "SRE AI"
+    prompt: "prompts/engineers/sre.md"
+    description: "サイト信頼性"
+
+communication:
+  flows:
+    - from: human
+      to: ceo
+      types: [requirement]
+
+    - from: ceo
+      to: [cto, cpo]
+      types: [instruction]
+
+    - from: cto
+      to: [pm_backend, pm_infra]
+      types: [instruction]
+
+    - from: cpo
+      to: pm_frontend
+      types: [instruction]
+
+    - from: pm_frontend
+      to: [frontend_senior, frontend_junior, ui_designer]
+      types: [task]
+
+    - from: pm_backend
+      to: [backend_senior, backend_junior, dba]
+      types: [task]
+
+    - from: pm_infra
+      to: [devops, security, sre]
+      types: [task]
+
+tmux:
+  windows:
+    - name: executives
+      layout: even-horizontal
+      roles: [ceo, cto, cpo]
+    - name: pms
+      layout: even-horizontal
+      roles: [pm_frontend, pm_backend, pm_infra]
+    - name: frontend
+      layout: main-vertical
+      roles: [frontend_senior, frontend_junior, ui_designer]
+    - name: backend
+      layout: main-vertical
+      roles: [backend_senior, backend_junior, dba]
+    - name: infra
+      layout: main-vertical
+      roles: [devops, security, sre]
+    - name: monitor
+      command: "watch -n 2 'ls -la shared/'"

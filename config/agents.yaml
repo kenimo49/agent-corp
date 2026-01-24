@@ -1,0 +1,143 @@
+# agent-corp エージェント設定ファイル
+# 対応LLMエージェントと起動コマンドを定義
+
+version: "1.0"
+
+# デフォルト設定
+defaults:
+  llm: claude
+  timeout: 300  # 秒
+  retry: 3
+
+# LLMエージェント定義
+llm_agents:
+  # Claude Code (Anthropic)
+  claude:
+    name: "Claude Code"
+    command: "claude"
+    args:
+      - "--system-prompt"
+      - "{prompt_file}"
+    env:
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+    install: "npm install -g @anthropic-ai/claude-code"
+    docs: "https://docs.anthropic.com/claude-code"
+
+  # Aider (OpenAI / Anthropic / その他)
+  aider:
+    name: "Aider"
+    command: "aider"
+    args:
+      - "--read"
+      - "{prompt_file}"
+    env:
+      OPENAI_API_KEY: "${OPENAI_API_KEY}"
+      # または ANTHROPIC_API_KEY
+    install: "pip install aider-chat"
+    docs: "https://aider.chat"
+
+  # GPT CLI (OpenAI)
+  gpt:
+    name: "GPT CLI"
+    command: "gpt"
+    args:
+      - "--system"
+      - "{prompt_file}"
+    env:
+      OPENAI_API_KEY: "${OPENAI_API_KEY}"
+    install: "pip install gpt-cli"
+    docs: "https://github.com/openai/gpt-cli"
+
+  # Ollama (ローカルLLM)
+  ollama:
+    name: "Ollama"
+    command: "ollama"
+    args:
+      - "run"
+      - "codellama"
+    env: {}
+    install: "curl -fsSL https://ollama.ai/install.sh | sh"
+    docs: "https://ollama.ai"
+
+  # LM Studio (ローカルLLM)
+  lmstudio:
+    name: "LM Studio"
+    command: "lms"
+    args:
+      - "chat"
+      - "--system"
+      - "{prompt_file}"
+    env: {}
+    install: "Download from https://lmstudio.ai"
+    docs: "https://lmstudio.ai"
+
+  # Cursor (IDE統合)
+  cursor:
+    name: "Cursor"
+    command: "cursor"
+    args:
+      - "--chat"
+    env: {}
+    install: "Download from https://cursor.sh"
+    docs: "https://cursor.sh"
+
+  # カスタム（ユーザー定義）
+  custom:
+    name: "Custom Agent"
+    command: "${CUSTOM_LLM_COMMAND}"
+    args: []
+    env: {}
+    install: "User defined"
+    docs: ""
+
+# エージェント役割定義
+roles:
+  ceo:
+    name: "CEO AI"
+    prompt: "prompts/ceo.md"
+    description: "ビジョン分析・戦略的指示"
+    window: "ceo"
+
+  pm:
+    name: "PM AI"
+    prompt: "prompts/pm.md"
+    description: "タスク分解・進捗管理・レビュー"
+    window: "pm"
+
+  frontend:
+    name: "Frontend Engineer AI"
+    prompt: "prompts/engineers/frontend.md"
+    description: "UI/UX、フロントエンド実装"
+    window: "engineers"
+    pane: 0
+
+  backend:
+    name: "Backend Engineer AI"
+    prompt: "prompts/engineers/backend.md"
+    description: "API、データベース、サーバー実装"
+    window: "engineers"
+    pane: 1
+
+  security:
+    name: "Security Engineer AI"
+    prompt: "prompts/engineers/security.md"
+    description: "セキュリティ、脆弱性対策"
+    window: "engineers"
+    pane: 2
+
+# tmuxセッション設定
+tmux:
+  session_name: "agent-corp"
+  windows:
+    - name: "ceo"
+      role: "ceo"
+    - name: "pm"
+      role: "pm"
+    - name: "engineers"
+      layout: "main-vertical"
+      panes:
+        - role: "frontend"
+        - role: "backend"
+        - role: "security"
+    - name: "monitor"
+      command: "watch -n 2 'ls -la shared/'"

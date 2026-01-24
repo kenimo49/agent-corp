@@ -1,0 +1,49 @@
+# ミニマル組織構成テンプレート
+# PM → Engineer (1人)
+
+name: "Minimal Organization"
+description: "最小構成（PM → 1 Engineer）"
+
+hierarchy:
+  - role: pm
+    reports_to: human
+    subordinates:
+      - engineer
+
+  - role: engineer
+    reports_to: pm
+    subordinates: []
+
+# カスタムロール定義
+custom_roles:
+  engineer:
+    name: "Engineer AI"
+    prompt: "prompts/engineers/fullstack.md"
+    description: "フルスタック開発"
+
+communication:
+  flows:
+    - from: human
+      to: pm
+      types: [requirement]
+
+    - from: pm
+      to: engineer
+      types: [task]
+
+    - from: engineer
+      to: pm
+      types: [report, question]
+
+    - from: pm
+      to: human
+      types: [report]
+
+tmux:
+  windows:
+    - name: pm
+      roles: [pm]
+    - name: engineer
+      roles: [engineer]
+    - name: monitor
+      command: "watch -n 2 'ls -la shared/'"
