@@ -8,14 +8,14 @@ agent-corpプロジェクトの開発ロードマップ。
 
 プロジェクトの基本構造とエージェント定義を整備する。
 
-- [ ] ディレクトリ構成の作成
-- [ ] 役割別システムプロンプトの作成
-  - [ ] ceo.md
-  - [ ] pm.md
-  - [ ] engineers/frontend.md
-  - [ ] engineers/backend.md
-  - [ ] engineers/security.md
-- [ ] tmux起動スクリプトの作成
+- [x] ディレクトリ構成の作成
+- [x] 役割別システムプロンプトの作成
+  - [x] ceo.md
+  - [x] pm.md
+  - [x] engineers/frontend.md
+  - [x] engineers/backend.md
+  - [x] engineers/security.md
+- [x] tmux起動スクリプトの作成
 
 ---
 

@@ -48,21 +48,31 @@
 ## クイックスタート
 
 ```bash
-# tmuxセッション作成
-tmux new-session -s agent-corp
+# リポジトリをクローン
+git clone https://github.com/kenimo49/agent-corp.git
+cd agent-corp
 
-# ウィンドウ分割（例: 4分割）
-# Ctrl+b % (縦分割)
-# Ctrl+b " (横分割)
+# セッションを起動（Claude Code使用）
+./scripts/start.sh start
 
-# 各ペインで役割別エージェントを起動
+# または、使用するLLMを指定
+./scripts/start.sh start --llm aider
+
+# セッションにアタッチ
+./scripts/start.sh attach
+
+# セッション終了
+./scripts/start.sh stop
 ```
 
 ## ディレクトリ構成
 
 ```
 agent-corp/
+├── CLAUDE.md          # AIエージェント向けガイド
+├── AGENTS.md          # CLAUDE.mdへの誘導
 ├── README.md
+├── ROADMAP.md         # 開発ロードマップ
 ├── prompts/           # 役割別システムプロンプト
 │   ├── ceo.md
 │   ├── pm.md
@@ -71,7 +81,14 @@ agent-corp/
 │       ├── backend.md
 │       └── security.md
 ├── scripts/           # 起動・管理スクリプト
+│   └── start.sh       # tmuxセッション起動
+├── shared/            # エージェント間共有ディレクトリ
 └── docs/              # ドキュメント
+    ├── _templates/    # テンプレート
+    ├── flows/         # 処理フロー
+    ├── knowledge/     # 実践的知識
+    ├── design/        # 設計思想
+    └── guide/         # ガイドライン
 ```
 
 ## ライセンス
