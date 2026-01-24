@@ -42,28 +42,25 @@ docs/flows/
 
 CEO → PM → Engineer の階層的なタスク割り当てフロー。
 
-| ドキュメント | 説明 |
-|-------------|------|
-| `feature-ceo-to-pm.md` | CEOがビジョンを分析し、PMに戦略的指示を送信 |
-| `feature-pm-to-engineer.md` | PMがタスクを分解し、Engineerに作業を割り当て |
+| ドキュメント | 状態 | 説明 |
+|-------------|------|------|
+| [requirement-to-task.md](./task-assignment/requirement-to-task.md) | ✅ | 要件からタスクへの変換フロー |
 
 ### 2. エージェント間通信（Agent Communication）
 
 エージェント間のメッセージ交換フロー。
 
-| ドキュメント | 説明 |
-|-------------|------|
-| `feature-instruction.md` | 上位エージェントから下位エージェントへの指示 |
-| `feature-report.md` | 下位エージェントから上位エージェントへの報告 |
-| `feature-question.md` | エージェント間の質問・回答 |
+| ドキュメント | 状態 | 説明 |
+|-------------|------|------|
+| [report-flow.md](./agent-communication/report-flow.md) | ✅ | 下位→上位への報告フロー |
 
 ### 3. エラー復旧（Error Recovery）
 
 エラー発生時の復旧フロー。
 
-| ドキュメント | 説明 |
-|-------------|------|
-| `feature-agent-restart.md` | エージェントがエラーで停止した場合の再起動フロー |
+| ドキュメント | 状態 | 説明 |
+|-------------|------|------|
+| [agent-restart.md](./error-recovery/agent-restart.md) | ✅ | エージェント再起動フロー |
 
 ---
 

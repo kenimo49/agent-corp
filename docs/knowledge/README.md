@@ -19,11 +19,11 @@
 
 ### 優先度別
 
-| 優先度 | ドキュメント | 説明 |
-|--------|-------------|------|
-| ⭐⭐⭐ 必読 | `agent-prompts.md` | エージェントプロンプト設計ガイド |
-| ⭐⭐ 推奨 | `tmux-integration.md` | tmux連携のベストプラクティス |
-| ⭐ 問題発生時 | `troubleshooting.md` | よくある問題と解決策 |
+| 優先度 | ドキュメント | 状態 | 説明 |
+|--------|-------------|------|------|
+| ⭐⭐⭐ 必読 | [agent-prompts.md](./agent-prompts.md) | ✅ | エージェントプロンプト設計ガイド |
+| ⭐⭐ 推奨 | [tmux-integration.md](./tmux-integration.md) | ✅ | tmux連携のベストプラクティス |
+| ⭐ 問題発生時 | [../guide/troubleshooting.md](../guide/troubleshooting.md) | ✅ | よくある問題と解決策 |
 
 ### カテゴリ別
 
