@@ -60,9 +60,21 @@
 
 プロジェクトへの貢献方法やドキュメント作成ルール。
 
+| ドキュメント | 説明 | 優先度 |
+|-------------|------|--------|
+| [setup.md](./guide/setup.md) | 環境構築・起動ガイド | ⭐⭐⭐ 必読 |
+| [tutorial.md](./guide/tutorial.md) | チュートリアル（5種） | ⭐⭐⭐ 必読 |
+| [configuration.md](./guide/configuration.md) | 設定カスタマイズ | ⭐⭐ 推奨 |
+| [troubleshooting.md](./guide/troubleshooting.md) | トラブルシューティング | ⭐ 問題発生時 |
+| [documentation.md](./guide/documentation.md) | ドキュメント作成ガイド | ⭐ 貢献時 |
+
+### 5. Scripts（スクリプトリファレンス）
+
+**ディレクトリ**: `scripts/`
+
 | ドキュメント | 説明 |
 |-------------|------|
-| `documentation.md` | ドキュメント作成ガイド |
+| [scripts/README.md](../scripts/README.md) | 全スクリプトのリファレンス |
 
 ---
 
@@ -83,7 +95,7 @@
 ### バグを修正したい
 
 1. [flows/](./flows/) で該当機能のフローを確認
-2. [knowledge/troubleshooting.md](./knowledge/troubleshooting.md) で既知の問題を確認
+2. [guide/troubleshooting.md](./guide/troubleshooting.md) で既知の問題を確認
 3. 該当ファイルを修正
 
 ---

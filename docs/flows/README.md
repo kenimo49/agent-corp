@@ -66,7 +66,33 @@ CEO → PM → Engineer の階層的なタスク割り当てフロー。
 
 ## 典型的な処理フロー例
 
-### 例1: 要件定義〜実装完了の流れ
+### 例1: claude-loopモード（自動監視）のフロー
+
+```
+human ──→ shared/requirements/
+              ↓
+           CEO ←─────────────────┐
+              ↓                  │
+   shared/instructions/pm    shared/reports/pm
+              ↓                  ↑
+            PM ←─────────────────┤
+              ↓                  │
+      shared/tasks/*      shared/reports/engineers/*
+              ↓                  ↑
+        Engineers ───────────────┘
+              ↓
+     shared/reports/human（最終報告）
+```
+
+**処理の流れ:**
+1. 人間が `msg.sh` で要件を `shared/requirements/` に作成
+2. CEO（agent-loop.sh ceo）が要件を検出、PMへの指示を作成
+3. PM（agent-loop.sh pm）が指示を検出、タスクに分解
+4. Engineers（agent-loop.sh frontend/backend/security）がタスクを実行、報告作成
+5. PMがエンジニア報告を集約、CEOへ報告
+6. CEOが最終報告を `shared/reports/human/` に作成
+
+### 例2: 従来フロー（手動）
 
 ```
 1. 人間がCEOに要件を伝える
@@ -113,7 +139,7 @@ CEO → PM → Engineer の階層的なタスク割り当てフロー。
 
 - [docs/design/message-protocol.md](../design/message-protocol.md) - メッセージプロトコル設計
 - [docs/design/shared-directory.md](../design/shared-directory.md) - 共有ディレクトリ設計
-- [docs/knowledge/troubleshooting.md](../knowledge/troubleshooting.md) - トラブルシューティング
+- [docs/guide/troubleshooting.md](../guide/troubleshooting.md) - トラブルシューティング
 
 ---
 

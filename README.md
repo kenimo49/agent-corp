@@ -2,6 +2,23 @@
 
 複数のAIエージェントを階層構造で連携させ、自律的に開発を行う「AI組織」を構築するためのフレームワーク。
 
+## TL;DR
+
+```bash
+# 起動
+./scripts/start.sh start
+
+# 要件を送信（別ターミナル）
+./scripts/msg.sh send --from human --to ceo --type requirement \
+    --title "機能追加" --body "ログイン機能を実装してください"
+
+# 4分割画面で進行確認
+./scripts/start.sh attach   # → Ctrl+b 4
+
+# 最終報告を確認
+cat shared/reports/human/*.md
+```
+
 ## コンセプト
 
 ```
@@ -42,8 +59,9 @@
 
 ## 必要要件
 
-- tmux
-- 任意のLLMエージェント（Claude Code, Aider, GPT-CLI など）
+- tmux 3.0以上
+- Claude Code (`npm install -g @anthropic-ai/claude-code`)
+- ANTHROPIC_API_KEY 環境変数の設定
 
 ## クイックスタート
 
@@ -52,18 +70,48 @@
 git clone https://github.com/kenimo49/agent-corp.git
 cd agent-corp
 
-# セッションを起動（Claude Code使用）
+# セッションを起動（自動監視モード）
 ./scripts/start.sh start
-
-# または、使用するLLMを指定
-./scripts/start.sh start --llm aider
 
 # セッションにアタッチ
 ./scripts/start.sh attach
 
+# 4分割オーバービュー表示: Ctrl+b → 4
+
+# 要件を送信（別ターミナルから）
+./scripts/msg.sh send --from human --to ceo --type requirement \
+    --title "機能追加" --body "ログイン機能を実装してください"
+
 # セッション終了
 ./scripts/start.sh stop
 ```
+
+## 処理フロー
+
+```
+human ──→ requirements/
+              ↓
+           CEO ←─────────────────┐
+              ↓                  │
+      instructions/pm        reports/pm
+              ↓                  ↑
+            PM ←─────────────────┤
+              ↓                  │
+         tasks/*          reports/engineers/*
+              ↓                  ↑
+        Engineers ───────────────┘
+              ↓
+        reports/human（最終報告）
+```
+
+## 起動モード
+
+| モード | コマンド | 説明 |
+|--------|----------|------|
+| claude-loop（推奨） | `start.sh start` | 自動監視・自動処理 |
+| claude | `start.sh start --llm claude` | 対話モード（手動） |
+| aider | `start.sh start --llm aider` | Aider使用 |
+| none | `start.sh start --llm none` | シェルのみ（デバッグ用） |
 
 ## ディレクトリ構成
 
@@ -81,7 +129,9 @@ agent-corp/
 │       ├── backend.md
 │       └── security.md
 ├── scripts/           # 起動・管理スクリプト
-│   └── start.sh       # tmuxセッション起動
+│   ├── start.sh       # tmuxセッション起動
+│   ├── msg.sh         # メッセージ送受信
+│   └── agent-loop.sh  # エージェント監視ループ
 ├── shared/            # エージェント間共有ディレクトリ
 └── docs/              # ドキュメント
     ├── _templates/    # テンプレート
@@ -90,6 +140,18 @@ agent-corp/
     ├── design/        # 設計思想
     └── guide/         # ガイドライン
 ```
+
+## 関連ドキュメント
+
+| カテゴリ | ドキュメント | 説明 |
+|---------|-------------|------|
+| ガイド | [docs/guide/setup.md](./docs/guide/setup.md) | 環境構築・起動手順 |
+| ガイド | [docs/guide/tutorial.md](./docs/guide/tutorial.md) | 5種類のチュートリアル |
+| 設計 | [docs/design/org-hierarchy.md](./docs/design/org-hierarchy.md) | 組織階層設計 |
+| 設計 | [docs/design/message-protocol.md](./docs/design/message-protocol.md) | 通信プロトコル |
+| フロー | [docs/flows/README.md](./docs/flows/README.md) | 処理フロー一覧 |
+| スクリプト | [scripts/README.md](./scripts/README.md) | スクリプトリファレンス |
+| AI向け | [CLAUDE.md](./CLAUDE.md) | AIエージェント開発ガイド |
 
 ## ライセンス
 

@@ -1,0 +1,437 @@
+#!/bin/bash
+
+# agent-loop.sh - エージェント監視ループスクリプト
+# 指定されたディレクトリを監視し、新しいファイルがあれば claude -p で処理する
+
+set -e
+
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+POLL_INTERVAL=${POLL_INTERVAL:-5}
+LLM_TYPE=${LLM_TYPE:-claude}
+
+# 色付きログ
+log_info() { echo -e "\033[0;34m[INFO]\033[0m $1"; }
+log_success() { echo -e "\033[0;32m[OK]\033[0m $1"; }
+log_error() { echo -e "\033[0;31m[ERROR]\033[0m $1"; }
+
+# LLMコマンド実行（LLM非依存）
+execute_llm() {
+    local full_prompt=$1
+
+    case $LLM_TYPE in
+        claude)
+            claude -p "$full_prompt" 2>&1
+            ;;
+        codex)
+            codex exec "$full_prompt" 2>&1
+            ;;
+        # gemini)
+        #     # Geminiは現在無効（標準入力の問題あり）
+        #     gemini -p "$full_prompt" < /dev/null 2>&1
+        #     ;;
+        *)
+            log_error "未対応のLLMタイプ: $LLM_TYPE"
+            return 1
+            ;;
+    esac
+}
+
+usage() {
+    cat << EOF
+Usage: $0 <role> [llm_type]
+
+Roles:
+    ceo         CEOエージェント（requirements → instructions/pm）
+    pm          PMエージェント（instructions/pm → tasks/*）
+    intern      インターン（tasks/intern → reports, Gemini使用）
+    frontend    Frontendエンジニア（tasks/frontend → reports）
+    backend     Backendエンジニア（tasks/backend → reports）
+    security    Securityエンジニア（tasks/security → reports）
+
+LLM Types:
+    claude      Claude Code（デフォルト）
+    codex       OpenAI Codex CLI
+    # gemini      Google Gemini CLI（現在無効）
+
+Environment:
+    POLL_INTERVAL   監視間隔（秒）[default: 5]
+    LLM_TYPE        使用するLLM [default: claude]
+
+Examples:
+    $0 ceo
+    $0 pm codex
+    POLL_INTERVAL=10 $0 frontend gemini
+EOF
+}
+
+# 処理済みファイルを記録
+PROCESSED_DIR="$PROJECT_DIR/shared/.processed"
+mkdir -p "$PROCESSED_DIR"
+
+is_processed() {
+    local file=$1
+    local hash=$(echo "$file" | md5sum | cut -d' ' -f1)
+    [ -f "$PROCESSED_DIR/$hash" ]
+}
+
+mark_processed() {
+    local file=$1
+    local hash=$(echo "$file" | md5sum | cut -d' ' -f1)
+    touch "$PROCESSED_DIR/$hash"
+}
+
+# CEOエージェント
+run_ceo() {
+    local watch_dir="$PROJECT_DIR/shared/requirements"
+    local report_dir="$PROJECT_DIR/shared/reports/pm"
+    local intern_report_dir="$PROJECT_DIR/shared/reports/intern"
+    local output_dir="$PROJECT_DIR/shared/instructions/pm"
+    local final_report_dir="$PROJECT_DIR/shared/reports/human"
+    local prompt_file="$PROJECT_DIR/prompts/ceo.md"
+
+    log_info "CEO Agent 起動 - 監視: $watch_dir, $report_dir, $intern_report_dir"
+
+    while true; do
+        # 1. 新しい要件を処理
+        for file in "$watch_dir"/*.md; do
+            [ -f "$file" ] || continue
+            is_processed "$file" && continue
+
+            log_info "新しい要件を検出: $(basename "$file")"
+
+            local content=$(cat "$file")
+            local basename=$(basename "$file" .md)
+            local output_file="$output_dir/${basename}-instruction.md"
+
+            local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a CEO.")
+            local full_prompt="$system_prompt
+
+---
+以下の要件を分析し、PMへの指示を作成してください。
+出力はMarkdown形式で、[INSTRUCTION TO: PM]フォーマットに従ってください。
+
+要件ファイル: $file
+---
+$content"
+
+            log_info "$LLM_TYPE APIで処理中..."
+            response=$(execute_llm "$full_prompt") || {
+                log_error "$LLM_TYPE API エラー"
+                continue
+            }
+
+            echo "$response" > "$output_file"
+            mark_processed "$file"
+            log_success "指示を作成: $output_file"
+        done
+
+        # 2. PMからの報告を処理
+        for file in "$report_dir"/*.md; do
+            [ -f "$file" ] || continue
+            is_processed "$file" && continue
+
+            log_info "PMから報告を受信: $(basename "$file")"
+
+            local content=$(cat "$file")
+            local basename=$(basename "$file" .md)
+            local output_file="$final_report_dir/${basename}-final.md"
+
+            local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a CEO.")
+            local full_prompt="$system_prompt
+
+---
+PMからの報告を確認し、人間への最終報告を作成してください。
+
+報告ファイル: $file
+---
+$content"
+
+            log_info "最終報告を作成中..."
+            response=$(execute_llm "$full_prompt") || {
+                log_error "$LLM_TYPE API エラー"
+                continue
+            }
+
+            echo "$response" > "$output_file"
+            mark_processed "$file"
+            log_success "最終報告を作成: $output_file"
+        done
+
+        # 3. インターンからの報告を処理
+        for file in "$intern_report_dir"/*.md; do
+            [ -f "$file" ] || continue
+            is_processed "$file" && continue
+
+            log_info "インターンから報告を受信: $(basename "$file")"
+
+            local content=$(cat "$file")
+            local basename=$(basename "$file" .md)
+            local output_file="$final_report_dir/${basename}-final.md"
+
+            local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a CEO.")
+            local full_prompt="$system_prompt
+
+---
+インターンからの調査報告を確認し、人間への最終報告を作成してください。
+内容を要約し、重要なポイントと推奨事項を明確にしてください。
+
+報告ファイル: $file
+---
+$content"
+
+            log_info "最終報告を作成中..."
+            response=$(execute_llm "$full_prompt") || {
+                log_error "$LLM_TYPE API エラー"
+                continue
+            }
+
+            echo "$response" > "$output_file"
+            mark_processed "$file"
+            log_success "最終報告を作成: $output_file"
+        done
+
+        sleep "$POLL_INTERVAL"
+    done
+}
+
+# PMエージェント
+run_pm() {
+    local watch_dir="$PROJECT_DIR/shared/instructions/pm"
+    local output_dir="$PROJECT_DIR/shared/tasks"
+    local report_watch_dir="$PROJECT_DIR/shared/reports/engineers"
+    local report_output_dir="$PROJECT_DIR/shared/reports/pm"
+    local prompt_file="$PROJECT_DIR/prompts/pm.md"
+
+    log_info "PM Agent 起動 - 監視: $watch_dir, $report_watch_dir"
+
+    while true; do
+        # 1. CEOからの指示を処理
+        for file in "$watch_dir"/*.md; do
+            [ -f "$file" ] || continue
+            is_processed "$file" && continue
+
+            log_info "新しい指示を検出: $(basename "$file")"
+
+            local content=$(cat "$file")
+            local basename=$(basename "$file" .md)
+
+            local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a PM.")
+            local full_prompt="$system_prompt
+
+---
+以下のCEOからの指示を分析し、エンジニアへのタスクに分解してください。
+
+## 出力形式
+以下の3セクションに分けて出力してください。該当タスクがない場合は「該当なし」と記載。
+
+### FRONTEND_TASK
+（フロントエンドエンジニアへのタスク内容）
+
+### BACKEND_TASK
+（バックエンドエンジニアへのタスク内容）
+
+### SECURITY_TASK
+（セキュリティエンジニアへのタスク内容）
+
+---
+指示ファイル: $file
+---
+$content"
+
+            log_info "$LLM_TYPE APIで処理中..."
+            response=$(execute_llm "$full_prompt") || {
+                log_error "$LLM_TYPE API エラー"
+                continue
+            }
+
+            # セクションごとにタスクを抽出して保存
+            echo "$response" | awk '
+                /^### FRONTEND_TASK/ { section="frontend"; next }
+                /^### BACKEND_TASK/ { section="backend"; next }
+                /^### SECURITY_TASK/ { section="security"; next }
+                /^###/ { section="" }
+                section != "" && !/^該当なし/ { print section ":" $0 }
+            ' | while IFS=: read -r role line; do
+                if [ -n "$role" ] && [ -n "$line" ]; then
+                    echo "$line" >> "$output_dir/${role}/${basename}-task.md"
+                fi
+            done
+
+            # タスクファイルが作成されたか確認
+            for role in frontend backend security; do
+                if [ -f "$output_dir/${role}/${basename}-task.md" ]; then
+                    log_success "タスク作成: tasks/${role}/${basename}-task.md"
+                fi
+            done
+
+            mark_processed "$file"
+        done
+
+        # 2. エンジニアからの報告を集約してCEOに報告
+        for role in frontend backend security; do
+            for file in "$report_watch_dir/$role"/*.md; do
+                [ -f "$file" ] || continue
+                is_processed "$file" && continue
+
+                log_info "エンジニア($role)から報告: $(basename "$file")"
+
+                local content=$(cat "$file")
+                local basename=$(basename "$file" .md)
+                local output_file="$report_output_dir/${basename}-pm-report.md"
+
+                local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a PM.")
+                local full_prompt="$system_prompt
+
+---
+エンジニア($role)からの報告を確認し、CEOへの進捗報告を作成してください。
+
+報告ファイル: $file
+---
+$content"
+
+                log_info "CEOへの報告を作成中..."
+                response=$(execute_llm "$full_prompt") || {
+                    log_error "$LLM_TYPE API エラー"
+                    continue
+                }
+
+                echo "$response" > "$output_file"
+                mark_processed "$file"
+                log_success "CEOへ報告: $output_file"
+            done
+        done
+
+        sleep "$POLL_INTERVAL"
+    done
+}
+
+# Internエージェント
+# TODO: Gemini対応後は gemini をデフォルトに戻す
+run_intern() {
+    local watch_dir="$PROJECT_DIR/shared/tasks/intern"
+    local output_dir="$PROJECT_DIR/shared/reports/intern"
+    local prompt_file="$PROJECT_DIR/prompts/intern.md"
+
+    mkdir -p "$watch_dir" "$output_dir"
+
+    log_info "Intern Agent 起動 - 監視: $watch_dir (LLM: $LLM_TYPE)"
+
+    while true; do
+        for file in "$watch_dir"/*.md; do
+            [ -f "$file" ] || continue
+            is_processed "$file" && continue
+
+            log_info "新しいタスクを検出: $(basename "$file")"
+
+            local content=$(cat "$file")
+            local basename=$(basename "$file" .md)
+            local output_file="$output_dir/${basename}-report.md"
+
+            local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are an intern.")
+            local full_prompt="$system_prompt
+
+---
+以下のタスクを実行し、CEOへの報告を作成してください。
+
+タスクファイル: $file
+---
+$content"
+
+            log_info "$LLM_TYPE APIで処理中..."
+            response=$(execute_llm "$full_prompt") || {
+                log_error "$LLM_TYPE API エラー"
+                continue
+            }
+
+            echo "$response" > "$output_file"
+            mark_processed "$file"
+            log_success "レポート作成: $output_file"
+        done
+
+        sleep "$POLL_INTERVAL"
+    done
+}
+
+# Engineerエージェント
+run_engineer() {
+    local role=$1
+    local watch_dir="$PROJECT_DIR/shared/tasks/$role"
+    local output_dir="$PROJECT_DIR/shared/reports/engineers/$role"
+    local prompt_file="$PROJECT_DIR/prompts/engineers/${role}.md"
+
+    log_info "$role Engineer Agent 起動 - 監視: $watch_dir"
+
+    while true; do
+        for file in "$watch_dir"/*.md; do
+            [ -f "$file" ] || continue
+            is_processed "$file" && continue
+
+            log_info "新しいタスクを検出: $(basename "$file")"
+
+            local content=$(cat "$file")
+            local basename=$(basename "$file" .md)
+            local output_file="$output_dir/${basename}-report.md"
+
+            local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a $role engineer.")
+            local full_prompt="$system_prompt
+
+---
+以下のタスクを実行し、結果を報告してください。
+
+タスクファイル: $file
+---
+$content"
+
+            log_info "$LLM_TYPE APIで処理中..."
+            response=$(execute_llm "$full_prompt") || {
+                log_error "$LLM_TYPE API エラー"
+                continue
+            }
+
+            echo "$response" > "$output_file"
+            mark_processed "$file"
+            log_success "レポート作成: $output_file"
+        done
+
+        sleep "$POLL_INTERVAL"
+    done
+}
+
+# メイン
+main() {
+    local role=${1:-}
+    local llm_type=${2:-claude}
+
+    # LLMタイプを環境変数に設定
+    export LLM_TYPE="$llm_type"
+
+    if [ -z "$role" ]; then
+        usage
+        exit 1
+    fi
+
+    case $role in
+        ceo)
+            run_ceo
+            ;;
+        pm)
+            run_pm
+            ;;
+        intern)
+            run_intern
+            ;;
+        frontend|backend|security)
+            run_engineer "$role"
+            ;;
+        help|--help|-h)
+            usage
+            ;;
+        *)
+            log_error "不明なロール: $role"
+            usage
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

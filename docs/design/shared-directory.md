@@ -291,7 +291,7 @@ done
 ## 関連ドキュメント
 
 - [docs/design/message-protocol.md](./message-protocol.md) - メッセージプロトコル設計
-- [docs/knowledge/troubleshooting.md](../knowledge/troubleshooting.md) - トラブルシューティング
+- [docs/guide/troubleshooting.md](../guide/troubleshooting.md) - トラブルシューティング
 
 ---
 

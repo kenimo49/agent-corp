@@ -22,6 +22,7 @@
 | 優先度 | ドキュメント | 状態 | 説明 |
 |--------|-------------|------|------|
 | ⭐⭐⭐ 必読 | [agent-prompts.md](./agent-prompts.md) | ✅ | エージェントプロンプト設計ガイド |
+| ⭐⭐⭐ 必読 | [token-consumption.md](./token-consumption.md) | ✅ | トークン消費の仕組みとコスト最適化 |
 | ⭐⭐ 推奨 | [tmux-integration.md](./tmux-integration.md) | ✅ | tmux連携のベストプラクティス |
 | ⭐ 問題発生時 | [../guide/troubleshooting.md](../guide/troubleshooting.md) | ✅ | よくある問題と解決策 |
 
@@ -31,22 +32,25 @@
 
 | ドキュメント | 説明 |
 |-------------|------|
-| `agent-prompts.md` | エージェントプロンプト設計ガイド |
-| `llm-compatibility.md` | LLM互換性ガイド（Claude, GPT, Gemini） |
+| [agent-prompts.md](./agent-prompts.md) | エージェントプロンプト設計ガイド |
+| [llm-cli-commands.md](./llm-cli-commands.md) | LLM CLIコマンド差異（Claude -p vs Codex exec） |
+
+#### コスト・パフォーマンス
+
+| ドキュメント | 説明 |
+|-------------|------|
+| [token-consumption.md](./token-consumption.md) | トークン消費の仕組みとコスト最適化 |
 
 #### 環境構築
 
 | ドキュメント | 説明 |
 |-------------|------|
-| `tmux-integration.md` | tmux連携のベストプラクティス |
-| `setup-guide.md` | 環境セットアップガイド |
+| [tmux-integration.md](./tmux-integration.md) | tmux連携のベストプラクティス |
+| [../guide/setup.md](../guide/setup.md) | 環境セットアップガイド |
 
 #### トラブルシューティング
 
-| ドキュメント | 説明 |
-|-------------|------|
-| `troubleshooting.md` | よくある問題と解決策 |
-| `debugging.md` | デバッグ手法 |
+→ [docs/guide/troubleshooting.md](../guide/troubleshooting.md) を参照
 
 ---
 
@@ -66,7 +70,7 @@
 
 ### エラーが発生した
 
-1. **[troubleshooting.md](./troubleshooting.md)** で既知の問題を確認
+1. **[troubleshooting.md](../guide/troubleshooting.md)** で既知の問題を確認
 2. **[../flows/error-recovery/](../flows/error-recovery/)** でエラー復旧フローを確認
 3. 解決しない場合は新しい問題としてドキュメントに追加
 
@@ -117,4 +121,5 @@
 
 ## 更新履歴
 
+- 2026-01-25: llm-cli-commands.md追加（Claude/Codexコマンド差異）
 - 2025-01-24: 初版作成
