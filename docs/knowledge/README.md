@@ -23,6 +23,7 @@
 |--------|-------------|------|------|
 | ⭐⭐⭐ 必読 | [agent-prompts.md](./agent-prompts.md) | ✅ | エージェントプロンプト設計ガイド |
 | ⭐⭐⭐ 必読 | [token-consumption.md](./token-consumption.md) | ✅ | トークン消費の仕組みとコスト最適化 |
+| ⭐⭐ 推奨 | [rag-integration.md](./rag-integration.md) | ✅ | RAG機能（プロジェクトコンテキスト自動注入） |
 | ⭐⭐ 推奨 | [tmux-integration.md](./tmux-integration.md) | ✅ | tmux連携のベストプラクティス |
 | ⭐ 問題発生時 | [../guide/troubleshooting.md](../guide/troubleshooting.md) | ✅ | よくある問題と解決策 |
 
@@ -34,6 +35,7 @@
 |-------------|------|
 | [agent-prompts.md](./agent-prompts.md) | エージェントプロンプト設計ガイド |
 | [llm-cli-commands.md](./llm-cli-commands.md) | LLM CLIコマンド差異（Claude -p vs Codex exec） |
+| [rag-integration.md](./rag-integration.md) | RAG機能（プロジェクトコンテキスト自動注入） |
 
 #### コスト・パフォーマンス
 
@@ -121,5 +123,6 @@
 
 ## 更新履歴
 
+- 2026-01-25: rag-integration.md追加（RAGによるプロジェクトコンテキスト自動注入）
 - 2026-01-25: llm-cli-commands.md追加（Claude/Codexコマンド差異）
 - 2025-01-24: 初版作成

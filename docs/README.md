@@ -64,6 +64,7 @@
 |-------------|------|--------|
 | [setup.md](./guide/setup.md) | 環境構築・起動ガイド | ⭐⭐⭐ 必読 |
 | [tutorial.md](./guide/tutorial.md) | チュートリアル（5種） | ⭐⭐⭐ 必読 |
+| [rag-usage.md](./guide/rag-usage.md) | RAG機能利用ガイド | ⭐⭐ 推奨 |
 | [configuration.md](./guide/configuration.md) | 設定カスタマイズ | ⭐⭐ 推奨 |
 | [troubleshooting.md](./guide/troubleshooting.md) | トラブルシューティング | ⭐ 問題発生時 |
 | [documentation.md](./guide/documentation.md) | ドキュメント作成ガイド | ⭐ 貢献時 |
@@ -119,4 +120,5 @@
 
 ## 更新履歴
 
+- 2026-01-25: RAG機能利用ガイド追加
 - 2025-01-24: 初版作成

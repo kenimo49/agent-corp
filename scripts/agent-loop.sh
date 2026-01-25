@@ -9,6 +9,10 @@ PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 POLL_INTERVAL=${POLL_INTERVAL:-5}
 LLM_TYPE=${LLM_TYPE:-claude}
 
+# RAG設定読み込み
+source "$PROJECT_DIR/scripts/config.sh"
+load_project_config "$PROJECT_DIR"
+
 # 色付きログ
 log_info() { echo -e "\033[0;34m[INFO]\033[0m $1"; }
 log_success() { echo -e "\033[0;32m[OK]\033[0m $1"; }
@@ -36,6 +40,52 @@ execute_llm() {
     esac
 }
 
+# RAGコンテキスト取得
+get_project_context() {
+    local task_content="${1:-}"
+
+    if ! is_rag_enabled; then
+        return 0
+    fi
+
+    # コンテキスト解析スクリプトを実行
+    local context
+    context=$("$PROJECT_DIR/scripts/analyze-context.sh" "$PROJECT_DIR" "$task_content" 2>/dev/null) || {
+        log_error "RAGコンテキスト生成に失敗"
+        return 0
+    }
+
+    echo "$context"
+}
+
+# RAGコンテキストをプロンプトに注入
+inject_rag_context() {
+    local system_prompt="$1"
+    local task_content="$2"
+    local task_prompt="$3"
+
+    local rag_context=""
+    if is_rag_enabled; then
+        rag_context=$(get_project_context "$task_content")
+    fi
+
+    if [ -n "$rag_context" ]; then
+        echo "$system_prompt
+
+---
+[プロジェクトコンテキスト]
+$rag_context
+
+---
+$task_prompt"
+    else
+        echo "$system_prompt
+
+---
+$task_prompt"
+    fi
+}
+
 usage() {
     cat << EOF
 Usage: $0 <role> [llm_type]
@@ -54,8 +104,11 @@ LLM Types:
     # gemini      Google Gemini CLI（現在無効）
 
 Environment:
-    POLL_INTERVAL   監視間隔（秒）[default: 5]
-    LLM_TYPE        使用するLLM [default: claude]
+    POLL_INTERVAL           監視間隔（秒）[default: 5]
+    LLM_TYPE                使用するLLM [default: claude]
+    ENABLE_RAG              RAGコンテキスト有効化 [default: true]
+    AGENT_KNOWLEDGE_DIR     ナレッジディレクトリ [default: ~/.agent-corp/knowledge]
+    RAG_CONTEXT_MAX_LINES   コンテキスト最大行数 [default: 200]
 
 Examples:
     $0 ceo
@@ -90,6 +143,7 @@ run_ceo() {
     local prompt_file="$PROJECT_DIR/prompts/ceo.md"
 
     log_info "CEO Agent 起動 - 監視: $watch_dir, $report_dir, $intern_report_dir"
+    is_rag_enabled && log_info "RAG有効 - ナレッジディレクトリ: $AGENT_KNOWLEDGE_DIR"
 
     while true; do
         # 1. 新しい要件を処理
@@ -104,15 +158,15 @@ run_ceo() {
             local output_file="$output_dir/${basename}-instruction.md"
 
             local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a CEO.")
-            local full_prompt="$system_prompt
-
----
-以下の要件を分析し、PMへの指示を作成してください。
+            local task_prompt="以下の要件を分析し、PMへの指示を作成してください。
 出力はMarkdown形式で、[INSTRUCTION TO: PM]フォーマットに従ってください。
 
 要件ファイル: $file
 ---
 $content"
+
+            local full_prompt
+            full_prompt=$(inject_rag_context "$system_prompt" "$content" "$task_prompt")
 
             log_info "$LLM_TYPE APIで処理中..."
             response=$(execute_llm "$full_prompt") || {
@@ -137,14 +191,14 @@ $content"
             local output_file="$final_report_dir/${basename}-final.md"
 
             local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a CEO.")
-            local full_prompt="$system_prompt
-
----
-PMからの報告を確認し、人間への最終報告を作成してください。
+            local task_prompt="PMからの報告を確認し、人間への最終報告を作成してください。
 
 報告ファイル: $file
 ---
 $content"
+
+            local full_prompt
+            full_prompt=$(inject_rag_context "$system_prompt" "$content" "$task_prompt")
 
             log_info "最終報告を作成中..."
             response=$(execute_llm "$full_prompt") || {
@@ -169,15 +223,15 @@ $content"
             local output_file="$final_report_dir/${basename}-final.md"
 
             local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a CEO.")
-            local full_prompt="$system_prompt
-
----
-インターンからの調査報告を確認し、人間への最終報告を作成してください。
+            local task_prompt="インターンからの調査報告を確認し、人間への最終報告を作成してください。
 内容を要約し、重要なポイントと推奨事項を明確にしてください。
 
 報告ファイル: $file
 ---
 $content"
+
+            local full_prompt
+            full_prompt=$(inject_rag_context "$system_prompt" "$content" "$task_prompt")
 
             log_info "最終報告を作成中..."
             response=$(execute_llm "$full_prompt") || {
@@ -216,10 +270,7 @@ run_pm() {
             local basename=$(basename "$file" .md)
 
             local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a PM.")
-            local full_prompt="$system_prompt
-
----
-以下のCEOからの指示を分析し、エンジニアへのタスクに分解してください。
+            local task_prompt="以下のCEOからの指示を分析し、エンジニアへのタスクに分解してください。
 
 ## 出力形式
 以下の3セクションに分けて出力してください。該当タスクがない場合は「該当なし」と記載。
@@ -237,6 +288,9 @@ run_pm() {
 指示ファイル: $file
 ---
 $content"
+
+            local full_prompt
+            full_prompt=$(inject_rag_context "$system_prompt" "$content" "$task_prompt")
 
             log_info "$LLM_TYPE APIで処理中..."
             response=$(execute_llm "$full_prompt") || {
@@ -280,14 +334,14 @@ $content"
                 local output_file="$report_output_dir/${basename}-pm-report.md"
 
                 local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a PM.")
-                local full_prompt="$system_prompt
-
----
-エンジニア($role)からの報告を確認し、CEOへの進捗報告を作成してください。
+                local task_prompt="エンジニア($role)からの報告を確認し、CEOへの進捗報告を作成してください。
 
 報告ファイル: $file
 ---
 $content"
+
+                local full_prompt
+                full_prompt=$(inject_rag_context "$system_prompt" "$content" "$task_prompt")
 
                 log_info "CEOへの報告を作成中..."
                 response=$(execute_llm "$full_prompt") || {
@@ -328,14 +382,14 @@ run_intern() {
             local output_file="$output_dir/${basename}-report.md"
 
             local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are an intern.")
-            local full_prompt="$system_prompt
-
----
-以下のタスクを実行し、CEOへの報告を作成してください。
+            local task_prompt="以下のタスクを実行し、CEOへの報告を作成してください。
 
 タスクファイル: $file
 ---
 $content"
+
+            local full_prompt
+            full_prompt=$(inject_rag_context "$system_prompt" "$content" "$task_prompt")
 
             log_info "$LLM_TYPE APIで処理中..."
             response=$(execute_llm "$full_prompt") || {
@@ -373,14 +427,14 @@ run_engineer() {
             local output_file="$output_dir/${basename}-report.md"
 
             local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a $role engineer.")
-            local full_prompt="$system_prompt
-
----
-以下のタスクを実行し、結果を報告してください。
+            local task_prompt="以下のタスクを実行し、結果を報告してください。
 
 タスクファイル: $file
 ---
 $content"
+
+            local full_prompt
+            full_prompt=$(inject_rag_context "$system_prompt" "$content" "$task_prompt")
 
             log_info "$LLM_TYPE APIで処理中..."
             response=$(execute_llm "$full_prompt") || {

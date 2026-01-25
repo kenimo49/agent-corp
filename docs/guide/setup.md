@@ -252,6 +252,39 @@ export SHARED_DIR="./shared"
 export LOG_LEVEL="info"  # debug, info, warn, error
 ```
 
+### RAG（コンテキスト自動注入）設定
+
+agent-corpはタスク実行時にプロジェクトのコンテキスト（ディレクトリ構造、技術スタック、関連ファイル等）を自動的に解析し、エージェントのプロンプトに注入します。
+
+```bash
+# RAG機能の有効/無効（デフォルト: true）
+export ENABLE_RAG=true
+
+# ナレッジディレクトリのパス（デフォルト: ~/.agent-corp/knowledge）
+export AGENT_KNOWLEDGE_DIR="$HOME/.agent-corp/knowledge"
+
+# コンテキストの最大行数（デフォルト: 200）
+export RAG_CONTEXT_MAX_LINES=200
+
+# RAG無効化での起動例
+ENABLE_RAG=false ./scripts/start.sh start
+```
+
+#### プロジェクト設定ファイル（.agent-config.yaml）
+
+プロジェクトルートに `.agent-config.yaml` を配置することで、プロジェクト固有の設定が可能です：
+
+```yaml
+# .agent-config.yaml
+rag:
+  enabled: true
+  knowledge_dir: ~/.agent-corp/knowledge
+  max_lines: 200
+  cache_ttl: 0  # 0=毎回更新
+```
+
+詳細は [RAG機能ドキュメント](../knowledge/rag-integration.md) を参照してください。
+
 ### スクリプトのオプション
 
 **start.sh:**
@@ -309,8 +342,9 @@ agent-corp/
 ## 次のステップ
 
 1. **[チュートリアル](./tutorial.md)** - 実際にタスクを実行してみる
-2. **[スクリプトリファレンス](../../scripts/README.md)** - 各スクリプトの詳細
-3. **[トラブルシューティング](./troubleshooting.md)** - 問題解決
+2. **[RAG利用ガイド](./rag-usage.md)** - プロジェクトコンテキスト自動注入の活用
+3. **[スクリプトリファレンス](../../scripts/README.md)** - 各スクリプトの詳細
+4. **[トラブルシューティング](./troubleshooting.md)** - 問題解決
 
 ## 関連ドキュメント
 
