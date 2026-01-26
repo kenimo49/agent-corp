@@ -235,8 +235,8 @@ start_session() {
         tmux send-keys -t "$SESSION_NAME:engineers.1" "clear && echo '=== Backend Engineer AI ===' && $cmd_backend" Enter
         tmux send-keys -t "$SESSION_NAME:engineers.2" "clear && echo '=== Security Engineer AI ===' && $cmd_security" Enter
 
-        # レイアウト調整
-        tmux select-layout -t "$SESSION_NAME:engineers" main-vertical
+        # レイアウト調整（均等分割）
+        tmux select-layout -t "$SESSION_NAME:engineers" even-horizontal
     fi
 
     # 監視用ウィンドウ
