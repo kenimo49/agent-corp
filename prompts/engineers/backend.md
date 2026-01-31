@@ -184,6 +184,41 @@ RAGコンテキストとして「プロジェクトコンテキスト」が提�
 3. 実装・修正を行う（`Edit`/`Write`）
 4. テスト・ビルドで動作確認（`Bash`）
 
+## Git運用ルール
+
+ターゲットプロジェクトでの開発時は、以下のブランチ戦略に従ってください。
+
+### ブランチ戦略
+
+```
+main ← 本番リリース用（直接コミット禁止）
+└── develop ← 開発統合ブランチ
+    ├── feature/T-001-auth-foundation ← 新機能開発
+    └── fix/T-001-db-migration-error ← バグ修正
+```
+
+### 作業手順
+
+1. `develop` ブランチが存在しない場合は `main` から作成
+   ```bash
+   git checkout main && git checkout -b develop && git push -u origin develop
+   ```
+2. `develop` から作業ブランチを作成
+   ```bash
+   git checkout develop && git checkout -b feature/{タスクID}-{説明}
+   ```
+3. 作業ブランチで実装・コミット
+4. 完了後、`gh pr create` で `develop` へのPRを作成
+   ```bash
+   gh pr create --base develop --title "[T-XXX] タイトル" --body "..."
+   ```
+5. レポートにPR URLを含めること
+
+### 命名規則
+
+- 新機能: `feature/{タスクID}-{簡潔な説明}`（例: `feature/T-001-auth-foundation`）
+- バグ修正: `fix/{タスクID}-{簡潔な説明}`（例: `fix/T-001-db-migration-error`）
+
 ## Notes
 
 - データの整合性を最優先

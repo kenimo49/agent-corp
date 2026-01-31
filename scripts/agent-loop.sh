@@ -223,15 +223,16 @@ $content"
             local final_task_prompt
             final_task_prompt=$(build_task_prompt "$content" "$task_prompt")
 
-            log_info "最終報告を作成中..."
+            log_info "最終報告を作成中... ($LLM_TYPE APIで処理中)"
             response=$(execute_llm "$system_prompt" "$final_task_prompt") || {
-                log_error "$LLM_TYPE API エラー"
+                log_error "$LLM_TYPE API エラー - 最終報告の作成に失敗"
                 continue
             }
 
             echo "$response" > "$output_file"
             mark_processed "$file"
             log_success "最終報告を作成: $output_file"
+            log_info "人間への報告完了 - $(basename "$output_file")"
         done
 
         # 3. インターンからの報告を処理
@@ -256,15 +257,16 @@ $content"
             local final_task_prompt
             final_task_prompt=$(build_task_prompt "$content" "$task_prompt")
 
-            log_info "最終報告を作成中..."
+            log_info "最終報告を作成中... ($LLM_TYPE APIで処理中)"
             response=$(execute_llm "$system_prompt" "$final_task_prompt") || {
-                log_error "$LLM_TYPE API エラー"
+                log_error "$LLM_TYPE API エラー - 最終報告の作成に失敗"
                 continue
             }
 
             echo "$response" > "$output_file"
             mark_processed "$file"
             log_success "最終報告を作成: $output_file"
+            log_info "人間への報告完了 - $(basename "$output_file")"
         done
 
         sleep "$POLL_INTERVAL"
@@ -475,6 +477,15 @@ run_engineer() {
 
             local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a $role engineer.")
             local task_prompt="以下のタスクを実行し、結果を報告してください。
+
+## Git運用ルール（必須）
+1. 作業前に \`develop\` ブランチから feature/ または fix/ ブランチを作成すること
+   - 新機能: \`feature/{タスクID}-{簡潔な説明}\`（例: \`feature/T-001-auth-foundation\`）
+   - バグ修正: \`fix/{タスクID}-{簡潔な説明}\`（例: \`fix/T-001-jwt-token-error\`）
+2. 作業はfeature/fixブランチで行い、developには直接コミットしないこと
+3. 作業完了後、\`gh pr create\` でdevelopブランチへのPull Requestを作成すること
+4. PRのタイトルにタスクIDを含めること
+5. developブランチが存在しない場合は、mainから作成すること
 
 タスクファイル: $file
 ---

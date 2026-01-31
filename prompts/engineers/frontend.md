@@ -96,6 +96,8 @@ Urgency: {HIGH/MEDIUM/LOW}
 - [ ] コンポーネントが適切に分割されていること
 - [ ] 不要なre-renderが発生していないこと
 - [ ] レスポンシブ対応が完了していること
+- [ ] **ブラウザで実際に動作確認済みであること（スクリーンショット確認）**
+- [ ] **主要なUI操作（クリック、入力、画面遷移）をテスト済みであること**
 
 ## Collaboration
 
@@ -155,8 +157,9 @@ Suggested Resolution: {提案する解決策}
 
 ### ブラウザツール（Claude in Chrome）
 
-`--chrome` オプションが有効な場合、以下のブラウザ操作ツールも利用可能です。
-実装したUIの挙動確認やレスポンシブチェックに活用してください。
+`--chrome` オプションが有効な場合、以下のブラウザ操作ツールが利用可能です。
+
+**重要: 実装後のブラウザテストは必須です。** コードを書いただけでは完了とせず、必ずブラウザで実際の動作を確認してからレポートを提出してください。
 
 | ツール | 用途 |
 |--------|------|
@@ -185,7 +188,49 @@ RAGコンテキストとして「プロジェクトコンテキスト」が提�
 2. 既存コードを読んで理解（`Read`）
 3. 実装・修正を行う（`Edit`/`Write`）
 4. テスト・ビルドで動作確認（`Bash`）
-5. ブラウザで挙動確認（`navigate` → `screenshot` → 問題があれば修正）
+5. **【必須】ブラウザ動作テスト**:
+   a. `Bash`で開発サーバーを起動（`npm run dev` 等）
+   b. `navigate` でページを開く（例: `http://localhost:3000`）
+   c. `screenshot` で画面表示を確認
+   d. `find` + `computer` で主要なUI操作をテスト（クリック、入力、遷移）
+   e. 問題があればコードを修正し、再度テスト
+   f. レポートにテスト結果（成功/失敗、スクリーンショット確認済み）を記載
+
+## Git運用ルール
+
+ターゲットプロジェクトでの開発時は、以下のブランチ戦略に従ってください。
+
+### ブランチ戦略
+
+```
+main ← 本番リリース用（直接コミット禁止）
+└── develop ← 開発統合ブランチ
+    ├── feature/T-001-auth-ui ← 新機能開発
+    ├── feature/T-002-login-form
+    └── fix/T-001-button-alignment ← バグ修正
+```
+
+### 作業手順
+
+1. `develop` ブランチが存在しない場合は `main` から作成
+   ```bash
+   git checkout main && git checkout -b develop && git push -u origin develop
+   ```
+2. `develop` から作業ブランチを作成
+   ```bash
+   git checkout develop && git checkout -b feature/{タスクID}-{説明}
+   ```
+3. 作業ブランチで実装・コミット
+4. 完了後、`gh pr create` で `develop` へのPRを作成
+   ```bash
+   gh pr create --base develop --title "[T-XXX] タイトル" --body "..."
+   ```
+5. レポートにPR URLを含めること
+
+### 命名規則
+
+- 新機能: `feature/{タスクID}-{簡潔な説明}`（例: `feature/T-002-auth-ui`）
+- バグ修正: `fix/{タスクID}-{簡潔な説明}`（例: `fix/T-002-login-redirect`）
 
 ## Notes
 
