@@ -1,25 +1,22 @@
 # ROADMAP
 
-agent-corpプロジェクトの開発ロードマップ。
+agent-corpフレームワークの開発ロードマップ。
+
+> **プロダクト運用ロードマップ**（agent-corpを使って実際にプロダクトを運用する際のフェーズ）は [ROADMAP-OPS.md](./ROADMAP-OPS.md) を参照。
 
 ---
 
-## v0.1 - 基盤整備（Foundation）
+## v0.1 - 基盤整備（Foundation） ✅
 
 プロジェクトの基本構造とエージェント定義を整備する。
 
 - [x] ディレクトリ構成の作成
-- [x] 役割別システムプロンプトの作成
-  - [x] ceo.md
-  - [x] pm.md
-  - [x] engineers/frontend.md
-  - [x] engineers/backend.md
-  - [x] engineers/security.md
+- [x] 役割別システムプロンプトの作成（ceo / pm / engineers）
 - [x] tmux起動スクリプトの作成
 
 ---
 
-## v0.2 - 通信プロトコル（Communication）
+## v0.2 - 通信プロトコル（Communication） ✅
 
 エージェント間の通信方式を確立する。
 
@@ -30,9 +27,7 @@ agent-corpプロジェクトの開発ロードマップ。
 
 ---
 
-## v0.5 - 動作検証（Validation）
-
-システム全体の動作を検証し、安定性を高める。
+## v0.5 - 動作検証（Validation） ✅
 
 - [x] シンプルなタスクでのE2Eテスト
 - [x] 複数エージェント協調動作の検証
@@ -41,9 +36,7 @@ agent-corpプロジェクトの開発ロードマップ。
 
 ---
 
-## v0.8 - ドキュメント整備（Documentation）
-
-ユーザー向けドキュメントを充実させる。
+## v0.8 - ドキュメント整備（Documentation） ✅
 
 - [x] セットアップガイド
 - [x] ユースケース集
@@ -52,18 +45,78 @@ agent-corpプロジェクトの開発ロードマップ。
 
 ---
 
-## v1.0 - 正式リリース（Release）
+## v1.0 - 正式リリース（Release） ✅
 
-安定版としてリリースし、拡張機能を提供する。
+- [x] 安定版としてのリリース（LICENSE / VERSION管理）
+- [x] 対応LLMエージェントの拡充（config/agents.yaml）
+- [x] GUI監視ツール（tools/dashboard.html）
+- [x] 組織構成カスタマイズ機能（config/org-templates/）
 
-- [x] 安定版としてのリリース
-  - [x] LICENSE (MIT)
-  - [x] VERSION管理
-- [x] 対応LLMエージェントの拡充
-  - [x] config/agents.yaml（Claude, Aider, GPT CLI, Ollama, LM Studio, Cursor）
-- [x] GUI監視ツール（オプション）
-  - [x] tools/dashboard.html（ブラウザベースダッシュボード）
-- [x] 組織構成カスタマイズ機能
-  - [x] config/org-templates/default.yaml
-  - [x] config/org-templates/minimal.yaml
-  - [x] config/org-templates/large.yaml
+---
+
+## v1.1 - エージェント実行基盤の修正（Agent Runtime Fix）
+
+現在のエージェントが「テキスト生成のみ」で実際のtool実行ができない問題を修正する。
+
+- [ ] `claude -p` に `--system-prompt` を分離して渡す (#5)
+- [ ] `claude -p` に `--allowedTools` / `--dangerously-skip-permissions` を追加
+- [ ] RAGコンテキストが対象プロジェクト（agent-corp自身ではなく）を解析するよう修正 (#6)
+- [ ] RAGの既知バグ修正（キャッシュ未結合 #7、日本語キーワード #8、200行制限 #9）
+
+---
+
+## v1.2 - Tool・MCP基盤（Tool Layer）
+
+エージェントが外部サービスと連携するためのtoolレイヤーを整備する。
+
+- [ ] MCP Server構成管理（`--mcp-config` の活用）
+- [ ] GitHub連携 MCP Server（issue / PR / review）
+- [ ] 基本CLI tool（git, docker, npm等）のallowedTools設定
+- [ ] tool認証情報の管理（`.env` / secrets）
+
+---
+
+## v1.3 - チーム動的構成（Dynamic Team Configuration）
+
+ハードコードされたロール構成を、YAML定義ベースの動的構成に移行する。
+
+- [ ] `teams.yaml` パーサーの実装 (#11)
+- [ ] 汎用エージェントループ（`run_agent(role_config)` に統合）
+- [ ] `start.sh` のtmuxレイアウト動的生成
+- [ ] ロールごとのtool / MCP設定
+
+---
+
+## v1.5 - 開発チーム拡張（Extended Dev Team）
+
+開発フローの全工程をカバーするロールを追加する。
+
+- [ ] PDM（プロダクト開発マネージャー）ロール (#14)
+- [ ] Reviewerロール（自動コードレビュー）(#14)
+- [ ] QAロール（テスト設計・実行）(#14)
+- [ ] 開発フロー全体の通信ディレクトリ設計
+
+---
+
+## v2.0 - プロダクト運用対応（Full Lifecycle）
+
+開発以外のチーム（運用・広報・COO）を追加し、プロダクトのフルライフサイクルをカバーする。
+
+- [ ] 運用チーム（運用リーダー / TS / インフラ担当）(#15)
+- [ ] 広報チーム（X / Reddit投稿、リリース報告）(#13)
+- [ ] COOロール（全体統括・日次レポート）(#12)
+- [ ] 障害管理システム（インシデント集約・GitHub Issue自動管理）(#16)
+- [ ] 人間の承認ゲート（投稿・デプロイ・エスカレーション）
+
+---
+
+## v2.5 - 継続的開発サイクル対応（Continuous Development Cycle）
+
+自律的な改善サイクルを支える仕組みを追加する。
+
+- [ ] トリアージ機能（要件の緊急/通常/実験への自動分類）
+- [ ] Hotfixレーン（簡略化フロー: Reviewer確認のみ→即デプロイ）
+- [ ] 実験レーン（フィーチャーフラグ管理）
+- [ ] 自律要件発見（運用チーム・TS・セキュリティからの自動起票）
+- [ ] フィードバックループ（デプロイ後メトリクス→次の要件への変換）
+- [ ] サイクル履歴記録（各サイクルの結果を蓄積・参照可能にする）
