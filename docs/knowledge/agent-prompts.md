@@ -18,12 +18,15 @@ agent-corpで使用するシステムプロンプトの設計パターンと実�
 
 ```
 prompts/
-├── ceo.md              # CEO AI プロンプト
-├── pm.md               # PM AI プロンプト
+├── ceo.md                    # CEO AI プロンプト
+├── pm.md                     # PM AI プロンプト
+├── intern.md                 # Intern AI プロンプト
+├── qa.md                     # QA AI プロンプト
+├── performance_analyst.md    # Performance Analyst AI プロンプト
 └── engineers/
-    ├── frontend.md     # Frontend Engineer
-    ├── backend.md      # Backend Engineer
-    └── security.md     # Security Engineer
+    ├── frontend.md           # Frontend Engineer
+    ├── backend.md            # Backend Engineer
+    └── security.md           # Security Engineer
 ```
 
 ---
@@ -130,6 +133,29 @@ flowchart TD
 1. 専門領域に特化した知識
 2. 実装詳細の決定権限
 3. 不明点は質問で確認
+
+### Performance Analyst AI (`prompts/performance_analyst.md`)
+
+**責任範囲**:
+- トークン消費・コスト効率の分析
+- 見積もり vs 実績の精度評価
+- 超過タスクの原因調査と改善提案
+
+**駆動方式**: タイマー駆動（`usage-log.jsonl` の変更検出時に分析を実行）
+**出力**: `report` (PM へ)
+
+```mermaid
+flowchart LR
+    UsageLog[.usage-log.jsonl] --> PA[Performance Analyst]
+    Estimates[*-estimate.json] --> PA
+    Actuals[*-actual.json] --> PA
+    PA -->|report| PM
+```
+
+**設計ポイント**:
+1. コード変更は行わない（分析と提案のみ）
+2. 見積もり精度のratio（actual/estimated）を定量評価
+3. ロール別の傾向分析で改善サイクルを回す
 
 ---
 

@@ -316,4 +316,156 @@ local_bug=$(count_files "$SHARED/bugs")
 echo -e "  ${DIM}要件:${RESET} ${local_req}  ${DIM}指示:${RESET} ${local_inst}  ${DIM}タスク:${RESET} ${local_task}  ${DIM}報告:${RESET} ${local_report}  ${DIM}バグ:${RESET} ${local_bug}"
 echo ""
 echo -e "  ${DIM}経過/予測: 超過=${RESET}${YELLOW}黄${RESET}  ${DIM}1.5x超過=${RESET}${RED}赤${RESET}  ${DIM}(見積もりなし: 5m=${RESET}${YELLOW}黄${RESET} ${DIM}10m=${RESET}${RED}赤${RESET}${DIM})${RESET}"
+
+# --- 未処理タスクキュー ---
+PROCESSED_DIR="$SHARED/.processed"
+
+is_task_processed() {
+    local file="$1"
+    local hash=$(echo "$file" | md5sum | cut -d' ' -f1)
+    [ -f "$PROCESSED_DIR/$hash" ]
+}
+
+# ロール別に未処理タスクを収集
+declare -A QUEUE_ROLES
+QUEUE_ROLES=(
+    ["requirements"]="$SHARED/requirements"
+    ["instructions"]="$SHARED/instructions/pm"
+    ["frontend"]="$SHARED/tasks/frontend"
+    ["backend"]="$SHARED/tasks/backend"
+    ["security"]="$SHARED/tasks/security"
+    ["qa"]="$SHARED/tasks/qa"
+)
+
+# requirement ID → タイトルのマッピングを構築
+declare -A REQ_TITLES
+for rf in "$SHARED"/requirements/*.md; do
+    [ -f "$rf" ] || continue
+    rid=$(grep -m1 '^id:' "$rf" | sed 's/^id: *//')
+    rtitle=$(grep -m1 '^# ' "$rf" | sed 's/^# *//')
+    [ -n "$rid" ] && REQ_TITLES["$rid"]="$rtitle"
+done
+
+# instruction ファイル → ref_requirement のマッピングを構築
+declare -A INST_TO_REQ
+for inf in "$SHARED"/instructions/pm/*.md; do
+    [ -f "$inf" ] || continue
+    inst_id=$(grep -m1 '^id:' "$inf" | sed 's/^id: *//')
+    inst_fname=$(basename "$inf" .md)
+    ref_req=$(grep -m1 '^ref_requirement:' "$inf" | sed 's/^ref_requirement: *//')
+    [ -n "$ref_req" ] && {
+        [ -n "$inst_id" ] && INST_TO_REQ["$inst_id"]="$ref_req"
+        INST_TO_REQ["$inst_fname"]="$ref_req"
+    }
+done
+
+# タスクファイルから元のrequirement IDを特定
+resolve_req_id() {
+    local file="$1"
+    local fname
+    fname=$(basename "$file")
+
+    # 1) ref_instruction から辿る
+    local ref_inst
+    ref_inst=$(grep -m1 '^ref_instruction:' "$file" 2>/dev/null | sed 's/^ref_instruction: *//')
+    if [ -n "$ref_inst" ]; then
+        local req_id="${INST_TO_REQ[$ref_inst]}"
+        if [ -n "$req_id" ]; then
+            echo "$req_id"
+            return
+        fi
+    fi
+
+    # 2) ref_requirement が直接ある場合
+    local ref_req
+    ref_req=$(grep -m1 '^ref_requirement:' "$file" 2>/dev/null | sed 's/^ref_requirement: *//')
+    if [ -n "$ref_req" ]; then
+        echo "$ref_req"
+        return
+    fi
+
+    # 3) ファイル名パターンによるヒューリスティック推測
+    case "$fname" in
+        *DEPLOY*|*deploy*)
+            echo "__deploy__" ;;
+        *SIGNIN-REDO*|*signin-redo*|*signin-commit*|*signin-cherry*|*signin-build*)
+            echo "__signin_redo__" ;;
+        *E2E*|*e2e*|*playwright*)
+            echo "__e2e__" ;;
+        *qa-login*|*qa_login*)
+            echo "__qa__" ;;
+        *)
+            echo "" ;;
+    esac
+}
+
+# 未処理タスクを収集し、依頼元ごとにグルーピング
+total_pending=0
+declare -A REQ_PENDING_ITEMS   # req_id → "role:title\n..."
+declare -A REQ_PENDING_COUNT   # req_id → count
+REQ_ORDER=()                   # 表示順序を保持
+UNKNOWN_KEY="__unknown__"
+
+for role in requirements instructions frontend backend security qa; do
+    dir="${QUEUE_ROLES[$role]}"
+    [ -d "$dir" ] || continue
+    for f in "$dir"/*.md; do
+        [ -f "$f" ] || continue
+        is_task_processed "$f" && continue
+
+        total_pending=$(( total_pending + 1 ))
+        fname=$(basename "$f")
+        title=$(get_task_title "$fname")
+        if [ -z "$title" ]; then
+            title=$(humanize_filename "$fname")
+        fi
+        title=$(truncate "$title" 40)
+
+        req_id=$(resolve_req_id "$f")
+        [ -z "$req_id" ] && req_id="$UNKNOWN_KEY"
+
+        # 初出のreq_idなら順序を記録
+        if [ -z "${REQ_PENDING_COUNT[$req_id]+x}" ]; then
+            REQ_ORDER+=("$req_id")
+            REQ_PENDING_COUNT["$req_id"]=0
+            REQ_PENDING_ITEMS["$req_id"]=""
+        fi
+        REQ_PENDING_COUNT["$req_id"]=$(( ${REQ_PENDING_COUNT[$req_id]} + 1 ))
+        REQ_PENDING_ITEMS["$req_id"]+="${role}|${title}\n"
+    done
+done
+
+echo ""
+echo -e "${DIM}  ─────────────────────────────────────────────────────────────────────────${RESET}"
+if [ "$total_pending" -gt 0 ]; then
+    echo -e "  ${BOLD}未処理キュー${RESET} ${YELLOW}${total_pending}件${RESET}"
+    echo ""
+    MAX_ITEMS=3
+    for req_id in "${REQ_ORDER[@]}"; do
+        count=${REQ_PENDING_COUNT[$req_id]}
+        if [ "$req_id" = "$UNKNOWN_KEY" ]; then
+            req_label="(依頼元不明)"
+        elif [ "$req_id" = "__deploy__" ]; then
+            req_label="本番デプロイ関連"
+        elif [ "$req_id" = "__signin_redo__" ]; then
+            req_label="ログイン機能とユーザー管理機能の追加（再指示）"
+        elif [ "$req_id" = "__e2e__" ]; then
+            req_label="ログイン機能のE2Eテスト作成"
+        elif [ "$req_id" = "__qa__" ]; then
+            req_label="ログイン機能の動作確認とバグ報告"
+        else
+            req_label="${REQ_TITLES[$req_id]}"
+            [ -z "$req_label" ] && req_label="依頼: ${req_id:0:12}..."
+        fi
+        echo -e "  ${CYAN}▸${RESET} ${BOLD}${req_label}${RESET} ${DIM}(${count}件)${RESET}"
+        echo -ne "${REQ_PENDING_ITEMS[$req_id]}" | head -n "$MAX_ITEMS" | while IFS='|' read -r r t; do
+            [ -n "$t" ] && printf "    ${DIM}%-11s${RESET} %s\n" "$r" "$t"
+        done
+        if [ "$count" -gt "$MAX_ITEMS" ]; then
+            echo -e "    ${DIM}...他$(( count - MAX_ITEMS ))件${RESET}"
+        fi
+    done
+else
+    echo -e "  ${BOLD}未処理キュー${RESET} ${GREEN}すべて処理済み${RESET}"
+fi
 echo ""

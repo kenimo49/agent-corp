@@ -14,7 +14,7 @@ agent-corpで利用可能な全ロールの一覧と、チーム構成の参考�
 
 ## ロール一覧
 
-### 現在利用可能なロール（7種）
+### 現在利用可能なロール（8種）
 
 | ロール | レイヤー | 上位者 | 下位者 | プロンプト |
 |--------|---------|--------|--------|-----------|
@@ -25,6 +25,7 @@ agent-corpで利用可能な全ロールの一覧と、チーム構成の参考�
 | Backend Engineer | 開発 | PM | - | `prompts/engineers/backend.md` |
 | Security Engineer | 開発 | PM | - | `prompts/engineers/security.md` |
 | QA | 品質 | PM | - | `prompts/qa.md` |
+| Performance Analyst | 分析 | PM | - | `prompts/performance_analyst.md` |
 
 ### 計画中のロール
 
@@ -249,6 +250,44 @@ agent-corpで利用可能な全ロールの一覧と、チーム構成の参考�
 
 ---
 
+### Performance Analyst AI
+
+**役割**: エージェント組織全体の効率分析・コスト最適化
+
+**責務**:
+- `shared/.usage-log.jsonl` を分析し、ロール別・タスク別のトークン消費・コスト推移を追跡
+- `shared/.estimates/{role}/*-actual.json` の完了実績データから見積もり精度を評価
+- 見積もり時間の1.5倍を超えたタスクの原因調査
+- ロール別の見積もり傾向（過大/過小）を分析し、改善提案
+- プロンプト改善、モデル選択変更、タスク分割粒度の調整を提案
+
+**駆動方式**: タイマー駆動（ファイル監視ではない）。`usage-log.jsonl` に変更があった場合のみ分析を実行。
+
+**データソース**:
+
+| データ | ファイル | 内容 |
+|--------|---------|------|
+| LLM呼び出しログ | `shared/.usage-log.jsonl` | トークン数、コスト、所要時間、モデル情報 |
+| 事前見積もり | `shared/.estimates/{role}/*-estimate.json` | 見積もり時間、複雑度、サブタスク |
+| 完了実績 | `shared/.estimates/{role}/*-actual.json` | 実績時間、見積もりとのratio、コスト |
+
+**通信**:
+
+| 方向 | 対象 | ディレクトリ | 形式 |
+|------|------|-------------|------|
+| 送信 | PM | `shared/reports/engineers/performance_analyst/` | `[REPORT TO: PM]` |
+
+**分析観点**:
+- 見積もり精度: ratio = actual / estimated（1.0が理想、< 0.5 は過大見積もり、> 1.5 は過小見積もり）
+- コスト効率: ロール別のコストパフォーマンス
+- モデル選択: Sonnetで十分なタスクにOpusを使っていないか
+- キャッシュ効率: cache_read vs cache_creation の比率
+- トークン異常: 入力トークンが異常に大きいケースの検出
+
+**注意**: コードの変更は行わない。分析と提案のみ。
+
+---
+
 ## チーム構成パターン
 
 ### パターン1: 最小構成
@@ -264,12 +303,13 @@ Human → PM → Engineer
 
 ```
 Human → CEO → PM → [Frontend, Backend, Security]
-         │    └→ QA
+         │    ├→ QA
+         │    └→ Performance Analyst
          └→ Intern
 ```
 
 **用途**: 一般的な開発プロジェクト
-**エージェント数**: 7
+**エージェント数**: 8
 
 ### パターン3: フルライフサイクル構成（計画中）
 
@@ -332,7 +372,8 @@ shared/
 │   └── engineers/
 │       ├── frontend/      # Frontend (W) → PM (R)
 │       ├── backend/       # Backend (W) → PM (R)
-│       └── security/      # Security (W) → PM (R)
+│       ├── security/      # Security (W) → PM (R)
+│       └── performance_analyst/  # PerfAnl (W) → PM (R)
 ├── bugs/                  # QA (W)
 ├── specs/api/             # Backend (W), 全員 (R)
 ├── security/              # Security (W)
