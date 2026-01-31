@@ -18,7 +18,9 @@
 PM AI
 ├── Engineer AI (Frontend) - UI/UX、フロントエンド実装
 ├── Engineer AI (Backend)  - API、データベース、サーバー実装
-└── Engineer AI (Security) - セキュリティ、脆弱性対策
+├── Engineer AI (Security) - セキュリティ、脆弱性対策
+├── QA AI                  - テスト、品質保証
+└── PO AI                  - PRの受け入れ確認、マージ判定
 ```
 
 ## Communication Protocol

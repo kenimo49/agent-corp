@@ -104,6 +104,8 @@ get_message_dir() {
                 echo "reports/pm"
             elif [ "$from" = "ceo" ]; then
                 echo "reports/human"
+            elif [ "$from" = "po" ]; then
+                echo "reports/po"
             else
                 echo "reports/engineers/$from"
             fi
@@ -403,7 +405,9 @@ reset_all() {
         "$shared/tasks/backend"
         "$shared/tasks/security"
         "$shared/tasks/qa"
+        "$shared/tasks/po"
         "$shared/reports/pm"
+        "$shared/reports/po"
         "$shared/reports/engineers/frontend"
         "$shared/reports/engineers/backend"
         "$shared/reports/engineers/security"

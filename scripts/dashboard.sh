@@ -183,6 +183,13 @@ get_status() {
         local filename
         filename=$(echo "$last_line" | grep -oP '報告完了 - \K.*')
         echo "DONE|報告済|$(humanize_filename "$filename")||$last_ts|"
+
+    elif echo "$last_line" | grep -qP '^\S+@\S+[:~]|^\$\s*$'; then
+        # シェルプロンプトが最終行 → プロセスが停止している
+        # 直前のログから最後のタイムスタンプを取得
+        local prev_ts
+        prev_ts=$(echo "$lines" | grep -oP '^\d{2}:\d{2}:\d{2}' | tail -1)
+        echo "ERROR|停止|プロセスが終了しています||$prev_ts|"
     else
         echo "ACTIVE|稼働中|稼働中||$last_ts|"
     fi
@@ -243,6 +250,7 @@ agents=(
     "Backend|${SESSION_NAME}:engineers.1"
     "Security|${SESSION_NAME}:engineers.2"
     "QA|${SESSION_NAME}:qa.0"
+    "PO|${SESSION_NAME}:po.0"
     "PerfAnl|${SESSION_NAME}:perf.0"
 )
 
@@ -335,6 +343,7 @@ QUEUE_ROLES=(
     ["backend"]="$SHARED/tasks/backend"
     ["security"]="$SHARED/tasks/security"
     ["qa"]="$SHARED/tasks/qa"
+    ["po"]="$SHARED/tasks/po"
 )
 
 # requirement ID → タイトルのマッピングを構築

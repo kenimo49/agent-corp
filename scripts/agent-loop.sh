@@ -3,7 +3,8 @@
 # agent-loop.sh - エージェント監視ループスクリプト
 # 指定されたディレクトリを監視し、新しいファイルがあれば claude -p で処理する
 
-set -e
+# set -e を使わない: 長期実行ループでは個別エラーハンドリング（|| { ... }）で対応
+# claude CLIがnon-zeroを返した際にスクリプト全体が死ぬのを防ぐ
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 POLL_INTERVAL=${POLL_INTERVAL:-5}
@@ -21,6 +22,7 @@ FRONTEND_MODEL=${FRONTEND_MODEL:-$CLAUDE_MODEL}
 BACKEND_MODEL=${BACKEND_MODEL:-$CLAUDE_MODEL}
 SECURITY_MODEL=${SECURITY_MODEL:-$CLAUDE_MODEL}
 QA_MODEL=${QA_MODEL:-$CLAUDE_MODEL}
+PO_MODEL=${PO_MODEL:-$CLAUDE_MODEL}
 PERFORMANCE_ANALYST_MODEL=${PERFORMANCE_ANALYST_MODEL:-$CLAUDE_MODEL}
 PERF_ANALYST_INTERVAL=${PERF_ANALYST_INTERVAL:-300}  # Performance Analyst チェック間隔（秒）
 
@@ -132,6 +134,7 @@ resolve_model() {
         backend)  echo "$BACKEND_MODEL" ;;
         security) echo "$SECURITY_MODEL" ;;
         qa)       echo "$QA_MODEL" ;;
+        po)       echo "$PO_MODEL" ;;
         performance_analyst) echo "$PERFORMANCE_ANALYST_MODEL" ;;
         *)        echo "$CLAUDE_MODEL" ;;
     esac
@@ -151,6 +154,7 @@ execute_llm() {
             model=$(resolve_model "${CURRENT_ROLE:-}")
 
             local raw_output
+            local claude_exit=0
             raw_output=$(claude -p "$task_prompt" \
                 --system-prompt "$system_prompt" \
                 --allowedTools "Bash,Edit,Read,Write" \
@@ -158,9 +162,9 @@ execute_llm() {
                 ${ENABLE_CHROME:+--chrome} \
                 ${model:+--model "$model"} \
                 --output-format json \
-                --dangerously-skip-permissions)
+                --dangerously-skip-permissions) || claude_exit=$?
 
-            if [ $? -ne 0 ] || ! echo "$raw_output" | jq -e '.result' >/dev/null 2>&1; then
+            if [ "$claude_exit" -ne 0 ] || ! echo "$raw_output" | jq -e '.result' >/dev/null 2>&1; then
                 log_error "claude API レスポンスの解析に失敗（フォールバック: 生テキスト出力）"
                 echo "$raw_output"
                 return 1
@@ -249,6 +253,7 @@ Roles:
     backend     Backendエンジニア（tasks/backend → reports）
     security    Securityエンジニア（tasks/security → reports）
     qa          QA（tasks/qa → reports/qa）
+    po          Product Owner（tasks/po → reports/po）
     performance_analyst  Performance Analyst（usage-log分析・最適化提案）
 
 LLM Types:
@@ -271,6 +276,7 @@ Environment:
     BACKEND_MODEL           Backendのモデル [default: CLAUDE_MODEL]
     SECURITY_MODEL          Securityのモデル [default: CLAUDE_MODEL]
     QA_MODEL                QAのモデル [default: CLAUDE_MODEL]
+    PO_MODEL                POのモデル [default: CLAUDE_MODEL]
     INTERN_MODEL            Internのモデル [default: CLAUDE_MODEL]
     PERFORMANCE_ANALYST_MODEL Performance Analystのモデル [default: CLAUDE_MODEL]
     PERF_ANALYST_INTERVAL   Performance Analyst チェック間隔（秒）[default: 300]
@@ -463,6 +469,9 @@ run_pm() {
 ### QA_TASK
 （QAへのテスト依頼。実装完了後の動作確認・リリース判定。該当なしの場合もあり）
 
+### PO_TASK
+（POへのPRレビュー依頼。EngineerがPRを作成した場合、受け入れ確認とマージを依頼。該当なしの場合もあり）
+
 ---
 指示ファイル: $file
 ---
@@ -485,6 +494,7 @@ $content"
                 /^#{2,3}\s*BACKEND[_\s-]*TASK/ { section="backend"; next }
                 /^#{2,3}\s*SECURITY[_\s-]*TASK/ { section="security"; next }
                 /^#{2,3}\s*QA[_\s-]*TASK/ { section="qa"; next }
+                /^#{2,3}\s*PO[_\s-]*TASK/ { section="po"; next }
                 /^#{2,3}\s/ { section="" }
                 section != "" && !/^該当なし/ && !/^[Nn]\/?[Aa]/ && !/^なし/ && !/^\s*$/ {
                     print section "\t" $0
@@ -497,7 +507,7 @@ $content"
 
             # タスクファイルが作成されたか確認
             local tasks_created=false
-            for role in frontend backend security qa; do
+            for role in frontend backend security qa po; do
                 if [ -f "$output_dir/${role}/${basename}-task.md" ]; then
                     log_success "タスク作成: tasks/${role}/${basename}-task.md"
                     tasks_created=true
@@ -506,18 +516,20 @@ $content"
 
             if [ "$tasks_created" = false ]; then
                 log_error "タスクファイルが作成されませんでした。LLMの出力形式を確認してください。"
-                log_info "期待形式: ### FRONTEND_TASK / ### BACKEND_TASK / ### SECURITY_TASK / ### QA_TASK"
+                log_info "期待形式: ### FRONTEND_TASK / ### BACKEND_TASK / ### SECURITY_TASK / ### QA_TASK / ### PO_TASK"
             fi
 
             mark_processed "$file"
         done
 
         # 2. エンジニアからの報告を集約してCEOに報告
-        for role in frontend backend security qa performance_analyst; do
+        for role in frontend backend security qa po performance_analyst; do
             local role_report_dir="$report_watch_dir/$role"
-            # QAはreports/qa/に報告を書く
+            # QA/POは専用ディレクトリに報告を書く
             if [ "$role" = "qa" ]; then
                 role_report_dir="$PROJECT_DIR/shared/reports/qa"
+            elif [ "$role" = "po" ]; then
+                role_report_dir="$PROJECT_DIR/shared/reports/po"
             fi
             for file in "$role_report_dir"/*.md; do
                 [ -f "$file" ] || continue
@@ -684,13 +696,16 @@ run_engineer() {
     if [ "$role" = "qa" ]; then
         prompt_file="$PROJECT_DIR/prompts/qa.md"
         output_dir="$PROJECT_DIR/shared/reports/qa"
+    elif [ "$role" = "po" ]; then
+        prompt_file="$PROJECT_DIR/prompts/po.md"
+        output_dir="$PROJECT_DIR/shared/reports/po"
     fi
 
     validate_environment "$role" "$prompt_file"
     mkdir -p "$watch_dir" "$output_dir"
 
-    # frontend/qaロールはClaude in Chrome連携を有効化（UI挙動チェック用）
-    if [ "$role" = "frontend" ] || [ "$role" = "qa" ]; then
+    # frontend/qa/poロールはClaude in Chrome連携を有効化（UI挙動チェック用）
+    if [ "$role" = "frontend" ] || [ "$role" = "qa" ] || [ "$role" = "po" ]; then
         export ENABLE_CHROME=1
         log_info "$role Engineer Agent 起動 - 監視: $watch_dir (Chrome連携: 有効)"
     else
@@ -752,6 +767,26 @@ run_engineer() {
    - UI操作で再現確認
 6. テスト結果をまとめ、リリース判定（GO/NO-GO/CONDITIONAL）を行う
 7. 発見したバグは再現手順付きで報告する
+
+タスクファイル: $file
+---
+$content"
+            elif [ "$role" = "po" ]; then
+                task_prompt="${estimate_instruction}以下のPRレビュー依頼を処理してください。
+
+## レビュー手順（必須）
+1. PR URLからPR番号を抽出
+2. \`gh pr view <番号>\` でPR詳細を取得
+3. \`gh pr diff <番号>\` で変更内容を確認
+4. 受け入れ基準を確認し、変更が要件を満たしているか判断
+5. 必要に応じて、ブラウザで動作確認（Claude in Chromeツール使用）
+   - 開発サーバーが起動していなければ起動する
+   - PRのブランチをチェックアウトして確認
+6. 判断:
+   - 問題なし → \`gh pr merge <番号> --squash\` でマージ
+   - 軽微な問題/判断困難 → \`gh pr comment <番号> --body \"...\"\` でフィードバック
+   - ブロッキング問題 → \`gh pr review <番号> --request-changes --body \"...\"\`
+7. PMへ結果を報告
 
 タスクファイル: $file
 ---
@@ -1005,7 +1040,7 @@ main() {
         intern)
             run_intern
             ;;
-        frontend|backend|security|qa)
+        frontend|backend|security|qa|po)
             run_engineer "$role"
             ;;
         performance_analyst)

@@ -25,6 +25,7 @@
 | ⭐⭐⭐ 必読 | [token-consumption.md](./token-consumption.md) | ✅ | トークン消費の仕組みとコスト最適化 |
 | ⭐⭐ 推奨 | [rag-integration.md](./rag-integration.md) | ✅ | RAG機能（プロジェクトコンテキスト自動注入） |
 | ⭐⭐ 推奨 | [tmux-integration.md](./tmux-integration.md) | ✅ | tmux連携のベストプラクティス |
+| ⭐⭐ 推奨 | [agent-idle-behavior.md](./agent-idle-behavior.md) | ✅ | エージェント放置時の挙動とコスト注意点 |
 | ⭐ 問題発生時 | [../guide/troubleshooting.md](../guide/troubleshooting.md) | ✅ | よくある問題と解決策 |
 
 ### カテゴリ別
@@ -42,6 +43,12 @@
 | ドキュメント | 説明 |
 |-------------|------|
 | [token-consumption.md](./token-consumption.md) | トークン消費の仕組みとコスト最適化 |
+
+#### 運用
+
+| ドキュメント | 説明 |
+|-------------|------|
+| [agent-idle-behavior.md](./agent-idle-behavior.md) | エージェント放置時の挙動とコスト注意点 |
 
 #### 環境構築
 
@@ -123,6 +130,7 @@
 
 ## 更新履歴
 
+- 2026-02-01: agent-idle-behavior.md追加（エージェント放置時の挙動とコスト注意点）
 - 2026-01-25: rag-integration.md追加（RAGによるプロジェクトコンテキスト自動注入）
 - 2026-01-25: llm-cli-commands.md追加（Claude/Codexコマンド差異）
 - 2025-01-24: 初版作成
