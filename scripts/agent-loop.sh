@@ -608,6 +608,71 @@ $content"
     done
 }
 
+# タスク完了時に見積もりと実績を突合して記録
+record_task_actual() {
+    local task_file="$1"    # タスクファイルのbasename (e.g. T-001-auth-foundation.md)
+    local role="$2"
+    local start_time="$3"   # タスク開始時刻 (epoch seconds)
+
+    local end_time=$(date +%s)
+    local actual_seconds=$(( end_time - start_time ))
+    local actual_minutes=$(awk "BEGIN {printf \"%.1f\", $actual_seconds / 60}")
+
+    local estimate_dir="$PROJECT_DIR/shared/.estimates/$role"
+    local basename_noext=$(echo "$task_file" | sed 's/\.md$//')
+    local estimate_file="$estimate_dir/${basename_noext}-estimate.json"
+    local actual_file="$estimate_dir/${basename_noext}-actual.json"
+
+    local est_minutes="null"
+    local est_complexity="unknown"
+    local description=""
+    if [ -f "$estimate_file" ]; then
+        est_minutes=$(jq -r '.estimated_duration_minutes // "null"' "$estimate_file" 2>/dev/null)
+        est_complexity=$(jq -r '.estimated_complexity // "unknown"' "$estimate_file" 2>/dev/null)
+        description=$(jq -r '.description // ""' "$estimate_file" 2>/dev/null)
+    fi
+
+    local ratio="null"
+    if [ "$est_minutes" != "null" ] && [ "$est_minutes" != "0" ]; then
+        ratio=$(awk "BEGIN {printf \"%.2f\", $actual_minutes / $est_minutes}")
+    fi
+
+    # usage-logからコスト・トークン情報を取得
+    local usage_log="$PROJECT_DIR/shared/.usage-log.jsonl"
+    local cost_usd="0"
+    local total_tokens="0"
+    if [ -f "$usage_log" ]; then
+        cost_usd=$(jq -s --arg t "$task_file" --arg r "$role" \
+            '[.[] | select(.task == $t and .role == $r) | .cost_usd // 0] | add // 0' \
+            "$usage_log" 2>/dev/null || echo "0")
+        total_tokens=$(jq -s --arg t "$task_file" --arg r "$role" \
+            '[.[] | select(.task == $t and .role == $r) | ((.input_tokens // 0) + (.output_tokens // 0))] | add // 0' \
+            "$usage_log" 2>/dev/null || echo "0")
+    fi
+
+    mkdir -p "$estimate_dir"
+    cat > "$actual_file" << ACTUAL_EOF
+{
+  "task_file": "$task_file",
+  "role": "$role",
+  "completed_at": "$(date -u '+%Y-%m-%dT%H:%M:%SZ')",
+  "estimated_minutes": $est_minutes,
+  "estimated_complexity": "$est_complexity",
+  "actual_minutes": $actual_minutes,
+  "ratio": $ratio,
+  "cost_usd": $cost_usd,
+  "total_tokens": $total_tokens,
+  "description": "$description"
+}
+ACTUAL_EOF
+
+    if [ "$est_minutes" != "null" ]; then
+        log_info "実績記録: ${task_file} est=${est_minutes}m actual=${actual_minutes}m ratio=${ratio}x cost=\$${cost_usd}"
+    else
+        log_info "実績記録: ${task_file} actual=${actual_minutes}m cost=\$${cost_usd} (見積もりなし)"
+    fi
+}
+
 # Engineerエージェント
 run_engineer() {
     local role=$1
@@ -640,6 +705,7 @@ run_engineer() {
 
             log_info "新しいタスクを検出: $(basename "$file")"
 
+            local task_start_time=$(date +%s)
             local content=$(cat "$file")
             local basename=$(basename "$file" .md)
             local output_file="$output_dir/${basename}-report.md"
@@ -718,6 +784,7 @@ $content"
 
             echo "$response" > "$output_file"
             mark_processed "$file"
+            record_task_actual "$(basename "$file")" "$role" "$task_start_time"
             log_success "レポート作成: $output_file"
         done
 
@@ -812,7 +879,37 @@ run_performance_analyst() {
             ' _ "$usage_log" {} + 2>/dev/null)
         fi
 
-        # 4. LLMに分析を依頼
+        # 4. 完了タスクの見積もりvs実績サマリー（*-actual.json から集計）
+        local actuals_summary=""
+        if [ -d "$estimate_dir" ]; then
+            actuals_summary=$(find "$estimate_dir" -name '*-actual.json' -exec cat {} + 2>/dev/null | jq -s '
+                if length == 0 then {total: 0, tasks: []}
+                else {
+                    total: length,
+                    avg_ratio: (map(select(.ratio != null) | .ratio) | if length > 0 then (add / length) else null end),
+                    total_cost: (map(.cost_usd // 0) | add),
+                    by_role: (group_by(.role) | map({
+                        role: .[0].role,
+                        count: length,
+                        avg_estimated_min: (map(select(.estimated_minutes != null) | .estimated_minutes) | if length > 0 then (add / length) else null end),
+                        avg_actual_min: (map(.actual_minutes) | add / length),
+                        avg_ratio: (map(select(.ratio != null) | .ratio) | if length > 0 then (add / length) else null end),
+                        total_cost: (map(.cost_usd // 0) | add)
+                    })),
+                    tasks: map({
+                        task: .task_file,
+                        role: .role,
+                        est: .estimated_minutes,
+                        actual: .actual_minutes,
+                        ratio: .ratio,
+                        cost: .cost_usd
+                    })
+                }
+                end
+            ' 2>/dev/null)
+        fi
+
+        # 5. LLMに分析を依頼
         local system_prompt
         system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a performance analyst.")
 
@@ -826,12 +923,19 @@ ${usage_summary:-{}}
 ## 超過タスク（見積もりの1.5倍超過）
 ${overrun_info:-なし}
 
+## 完了タスク実績（見積もり vs 実績）
+\`\`\`json
+${actuals_summary:-{\"total\": 0}}
+\`\`\`
+
 ## 分析指示
 1. ロール別コスト効率を評価してください
 2. 超過タスクがあれば原因を推測し、改善策を提案してください
-3. モデル選択の妥当性を検証してください（model_usage フィールドを参照）
-4. キャッシュ効率（cache_read vs cache_creation の比率）を評価してください
-5. 全体的な改善提案をまとめてください
+3. **見積もり精度を評価してください**（ratio=actual/estimated, 1.0が理想。ratio < 0.5 は過大見積もり、ratio > 1.5 は過小見積もり）
+4. ロール別に見積もり傾向（過大/過小/適正）を分析し、改善提案してください
+5. モデル選択の妥当性を検証してください（model_usage フィールドを参照）
+6. キャッシュ効率（cache_read vs cache_creation の比率）を評価してください
+7. 全体的な改善提案をまとめてください
 
 レポートは [REPORT TO: PM] フォーマットで出力してください。"
 

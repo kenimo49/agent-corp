@@ -1,0 +1,17 @@
+{
+  "task_file": "T-DEPLOY-003-SEC.md",
+  "role": "security",
+  "estimated_at": "2026-01-31T21:40:00Z",
+  "estimated_duration_minutes": 30,
+  "estimated_complexity": "medium",
+  "description": "再デプロイ後の認証セキュリティ検証（JWT、保護エンドポイント、入力バリデーション、CORS、コンテナ）",
+  "subtasks": [
+    "前提条件の確認（BE/FEレポート確認）",
+    "認証フロー検証（JWT発行・検証・有効期限）",
+    "保護エンドポイント検証（未認証拒否・認証済みアクセス）",
+    "入力バリデーション検証（不正入力・SQLi）",
+    "CORS設定確認",
+    "コンテナセキュリティ確認（non-root）",
+    "セキュリティ検証レポート作成"
+  ]
+}
