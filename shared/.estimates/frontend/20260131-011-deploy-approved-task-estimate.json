@@ -1,0 +1,14 @@
+{
+  "task_file": "20260131-011-deploy-approved-task.md",
+  "role": "frontend",
+  "estimated_at": "2026-01-31T12:40:04Z",
+  "estimated_duration_minutes": 30,
+  "estimated_complexity": "medium",
+  "description": "デプロイ後のフロントエンド動作確認（認証フロー・既存機能・レスポンシブ）",
+  "subtasks": [
+    "ログイン画面・新規登録画面の表示確認",
+    "認証フロー全体（登録→ログイン→ProtectedRoute→ログアウト）の動作確認",
+    "既存機能（ペルソナ一覧/詳細/チャット）の非破壊確認",
+    "レスポンシブ表示の確認"
+  ]
+}
