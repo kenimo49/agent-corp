@@ -153,6 +153,26 @@ Suggested Resolution: {提案する解決策}
 - **Edit**: 既存ファイルを編集する（バグ修正、機能追加）
 - **Bash**: シェルコマンドを実行する（テスト実行、ビルド、git操作等）
 
+### ブラウザツール（Claude in Chrome）
+
+`--chrome` オプションが有効な場合、以下のブラウザ操作ツールも利用可能です。
+実装したUIの挙動確認やレスポンシブチェックに活用してください。
+
+| ツール | 用途 |
+|--------|------|
+| `mcp__claude-in-chrome__navigate` | URLへの遷移（localhost等の開発サーバー） |
+| `mcp__claude-in-chrome__read_page` | ページのアクセシビリティツリー取得 |
+| `mcp__claude-in-chrome__computer` | マウス/キーボード操作、スクリーンショット撮影 |
+| `mcp__claude-in-chrome__find` | ページ内要素の検索（ボタン、入力欄等） |
+| `mcp__claude-in-chrome__javascript_tool` | ブラウザ上でのJavaScript実行 |
+| `mcp__claude-in-chrome__get_page_text` | ページのテキスト内容を抽出 |
+
+**活用例**:
+- `dev server` 起動後に `navigate` でページを開き、`screenshot` で表示確認
+- `read_page` でアクセシビリティツリーを確認し、a11y問題を検出
+- `find` でUI要素を特定し、`computer` でクリック・入力操作をテスト
+- レスポンシブ対応の確認（`resize_window` でビューポート変更）
+
 ### ターゲットプロジェクト
 
 開発対象のプロジェクトは `--add-dir` で指定されたディレクトリです。
@@ -165,6 +185,7 @@ RAGコンテキストとして「プロジェクトコンテキスト」が提�
 2. 既存コードを読んで理解（`Read`）
 3. 実装・修正を行う（`Edit`/`Write`）
 4. テスト・ビルドで動作確認（`Bash`）
+5. ブラウザで挙動確認（`navigate` → `screenshot` → 問題があれば修正）
 
 ## Notes
 

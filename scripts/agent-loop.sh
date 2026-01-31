@@ -52,6 +52,7 @@ execute_llm() {
                 --system-prompt "$system_prompt" \
                 --allowedTools "Bash,Edit,Read,Write" \
                 --add-dir "$TARGET_PROJECT" \
+                ${ENABLE_CHROME:+--chrome} \
                 --dangerously-skip-permissions 2>&1
             ;;
         codex)
@@ -452,7 +453,14 @@ run_engineer() {
     validate_environment "$role" "$prompt_file"
     mkdir -p "$watch_dir" "$output_dir"
 
-    log_info "$role Engineer Agent 起動 - 監視: $watch_dir"
+    # frontendロールはClaude in Chrome連携を有効化（UI挙動チェック用）
+    if [ "$role" = "frontend" ]; then
+        export ENABLE_CHROME=1
+        log_info "$role Engineer Agent 起動 - 監視: $watch_dir (Chrome連携: 有効)"
+    else
+        unset ENABLE_CHROME
+        log_info "$role Engineer Agent 起動 - 監視: $watch_dir"
+    fi
 
     while true; do
         for file in "$watch_dir"/*.md; do

@@ -71,24 +71,70 @@ gemini
 - 現在、スクリプトからの呼び出しに問題があり無効化中
 -->
 
+## Claude Code の主要オプション
+
+`claude -p` で利用可能な主要オプション:
+
+| オプション | 説明 | 用途 |
+|-----------|------|------|
+| `--system-prompt` | システムプロンプトを分離して指定 | ロール定義 |
+| `--allowedTools` | 使用可能なツールを指定 | `"Bash,Edit,Read,Write"` |
+| `--add-dir` | 追加のディレクトリアクセスを許可 | TARGET_PROJECT指定 |
+| `--dangerously-skip-permissions` | 権限確認をスキップ | 自動実行 |
+| `--chrome` | Claude in Chrome連携を有効化 | ブラウザ操作 |
+| `--no-chrome` | Claude in Chrome連携を無効化 | ブラウザ不要時 |
+
+### --chrome オプション
+
+`--chrome` を付けると、Chrome拡張「Claude in Chrome」のMCPツールが `claude -p` でも利用可能になる。
+
+```bash
+# ブラウザでページを開いて確認
+claude -p "http://localhost:3000 を開いてUIを確認してください" \
+    --chrome \
+    --dangerously-skip-permissions
+```
+
+**利用可能になるツール例**:
+- `mcp__claude-in-chrome__navigate`: URL遷移
+- `mcp__claude-in-chrome__read_page`: ページ内容の読み取り
+- `mcp__claude-in-chrome__computer`: マウス/キーボード操作、スクリーンショット
+- `mcp__claude-in-chrome__find`: 要素の検索
+- `mcp__claude-in-chrome__javascript_tool`: JavaScript実行
+
+**前提条件**:
+- Google Chrome がインストールされていること
+- Claude in Chrome 拡張がインストール・有効化されていること
+- Chrome が起動していること（WSLg経由でも可）
+
+**agent-corpでの活用**:
+- Frontend Engineer: UIの挙動チェック、レスポンシブ確認
+- QA（将来）: E2Eブラウザテスト、スクリーンショットによる視覚的確認
+
 ## agent-loop.sh での実装
 
-`scripts/agent-loop.sh` の `execute_llm()` 関数で差異を吸収しています：
+`scripts/agent-loop.sh` の `execute_llm()` 関数で差異を吸収しています。
+`--chrome` はオプションで、ロールに応じて有効/無効を切り替えます。
 
 ```bash
 execute_llm() {
-    local full_prompt=$1
+    local system_prompt="$1"
+    local task_prompt="$2"
 
     case $LLM_TYPE in
         claude)
-            claude -p "$full_prompt" 2>&1
+            claude -p "$task_prompt" \
+                --system-prompt "$system_prompt" \
+                --allowedTools "Bash,Edit,Read,Write" \
+                --add-dir "$TARGET_PROJECT" \
+                ${ENABLE_CHROME:+--chrome} \
+                --dangerously-skip-permissions 2>&1
             ;;
         codex)
-            codex exec "$full_prompt" 2>&1
+            codex exec "$system_prompt
+
+$task_prompt" 2>&1
             ;;
-        # gemini)
-        #     gemini -p "$full_prompt" < /dev/null 2>&1
-        #     ;;
     esac
 }
 ```
