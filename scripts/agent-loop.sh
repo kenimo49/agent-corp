@@ -13,11 +13,12 @@ LLM_TYPE=${LLM_TYPE:-claude}
 source "$PROJECT_DIR/scripts/config.sh"
 load_project_config "$PROJECT_DIR"
 
-# 色付きログ
-log_info() { echo -e "\033[0;34m[INFO]\033[0m $1"; }
-log_success() { echo -e "\033[0;32m[OK]\033[0m $1"; }
-log_warn() { echo -e "\033[0;33m[WARN]\033[0m $1"; }
-log_error() { echo -e "\033[0;31m[ERROR]\033[0m $1"; }
+# 色付きログ（タイムスタンプ付き）
+_ts() { date '+%H:%M:%S'; }
+log_info() { echo -e "\033[2m$(_ts)\033[0m \033[0;34m[INFO]\033[0m $1"; }
+log_success() { echo -e "\033[2m$(_ts)\033[0m \033[0;32m[OK]\033[0m $1"; }
+log_warn() { echo -e "\033[2m$(_ts)\033[0m \033[0;33m[WARN]\033[0m $1"; }
+log_error() { echo -e "\033[2m$(_ts)\033[0m \033[0;31m[ERROR]\033[0m $1"; }
 
 # 起動時バリデーション
 validate_environment() {

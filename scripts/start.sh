@@ -289,6 +289,10 @@ start_session() {
         tmux send-keys -t "$SESSION_NAME:overview.4" "watch -n 1 'echo \"=== Frontend ===\"; tmux capture-pane -t $SESSION_NAME:engineers.0 -p -J | grep \".\" | tail -12'" Enter
         tmux send-keys -t "$SESSION_NAME:overview.5" "watch -n 1 'echo \"=== Backend ===\"; tmux capture-pane -t $SESSION_NAME:engineers.1 -p -J | grep \".\" | tail -12'" Enter
         tmux send-keys -t "$SESSION_NAME:overview.6" "watch -n 1 'echo \"=== Security ===\"; tmux capture-pane -t $SESSION_NAME:engineers.2 -p -J | grep \".\" | tail -12'" Enter
+
+        # ダッシュボードウィンドウ
+        tmux new-window -t "$SESSION_NAME" -n "dashboard"
+        tmux send-keys -t "$SESSION_NAME:dashboard" "watch -n 5 -c $PROJECT_DIR/scripts/dashboard.sh $SESSION_NAME" Enter
     fi
 
     # CEOウィンドウを選択
@@ -312,6 +316,7 @@ start_session() {
     echo "  4: qa        - QA AI (Chrome連携)"
     echo "  5: monitor   - 共有ディレクトリ監視"
     echo "  6: overview  - 7分割オーバービュー（Ctrl+b 6 で表示）"
+    echo "  7: dashboard - エージェント状態サマリー（Ctrl+b 7 で表示）"
     echo ""
     echo "アタッチするには: tmux attach -t $SESSION_NAME"
     echo "または: $0 attach"
