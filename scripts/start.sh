@@ -72,7 +72,8 @@ session_exists() {
 init_shared_dirs() {
     log_info "共有ディレクトリを初期化中..."
 
-    mkdir -p "$PROJECT_DIR/shared"/{requirements,instructions/pm,tasks/{frontend,backend,security,intern,qa},reports/{human,pm,intern,qa,engineers/{frontend,backend,security}},specs/api,bugs}
+    mkdir -p "$PROJECT_DIR/shared"/{requirements,instructions/pm,tasks/{frontend,backend,security,intern,qa},reports/{human,pm,intern,qa,engineers/{frontend,backend,security,performance_analyst}},specs/api,bugs}
+    mkdir -p "$PROJECT_DIR/shared/.estimates"/{frontend,backend,security,qa}
 
     log_success "共有ディレクトリを作成しました"
 }
@@ -124,6 +125,7 @@ get_agent_command() {
         engineers/backend) loop_role="backend" ;;
         engineers/security) loop_role="security" ;;
         qa) loop_role="qa" ;;
+        performance_analyst) loop_role="performance_analyst" ;;
     esac
 
     case $llm_type in
@@ -254,6 +256,16 @@ start_session() {
         tmux send-keys -t "$SESSION_NAME:qa" "clear && echo '=== QA AI ===' && $cmd_qa" Enter
     fi
 
+    # Performance Analyst ウィンドウ作成
+    local cmd_perf=$(get_agent_command "performance_analyst" "$llm_type")
+    if [ "$dry_run" = true ]; then
+        echo "[DRY-RUN] tmux new-window -t $SESSION_NAME -n perf"
+        echo "[DRY-RUN] Performance Analyst command: $cmd_perf"
+    else
+        tmux new-window -t "$SESSION_NAME" -n "perf"
+        tmux send-keys -t "$SESSION_NAME:perf" "clear && echo '=== Performance Analyst AI ===' && $cmd_perf" Enter
+    fi
+
     # 監視用ウィンドウ
     if [ "$dry_run" = true ]; then
         echo "[DRY-RUN] tmux new-window -t $SESSION_NAME -n monitor"
@@ -262,20 +274,21 @@ start_session() {
         tmux send-keys -t "$SESSION_NAME:monitor" "cd $PROJECT_DIR && watch -n 2 'echo \"=== Shared Directory ===\"; ls -la shared/'" Enter
     fi
 
-    # 7分割オーバービューウィンドウ（CEO/PM/Intern/QA + Engineers）
+    # 8分割オーバービューウィンドウ（CEO/PM/Intern/QA/PerfAnl + Engineers）
     if [ "$dry_run" = true ]; then
         echo "[DRY-RUN] tmux new-window -t $SESSION_NAME -n overview"
-        echo "[DRY-RUN] 7分割レイアウトで各エージェントを監視表示"
+        echo "[DRY-RUN] 8分割レイアウトで各エージェントを監視表示"
     else
         tmux new-window -t "$SESSION_NAME" -n "overview"
 
-        # 7分割レイアウトを作成（tiledで自動配置）
+        # 8分割レイアウトを作成（tiledで自動配置）
         tmux split-window -h -t "$SESSION_NAME:overview"
         tmux split-window -h -t "$SESSION_NAME:overview.0"
         tmux split-window -v -t "$SESSION_NAME:overview.0"
         tmux split-window -v -t "$SESSION_NAME:overview.2"
         tmux split-window -v -t "$SESSION_NAME:overview.4"
         tmux split-window -v -t "$SESSION_NAME:overview.0"
+        tmux split-window -v -t "$SESSION_NAME:overview.4"
 
         # 均等レイアウトに調整
         tmux select-layout -t "$SESSION_NAME:overview" tiled
@@ -286,9 +299,10 @@ start_session() {
         tmux send-keys -t "$SESSION_NAME:overview.1" "watch -n 1 'echo \"=== PM ===\"; tmux capture-pane -t $SESSION_NAME:pm.0 -p -J | grep \".\" | tail -12'" Enter
         tmux send-keys -t "$SESSION_NAME:overview.2" "watch -n 1 'echo \"=== Intern (Codex) ===\"; tmux capture-pane -t $SESSION_NAME:intern.0 -p -J | grep \".\" | tail -12'" Enter
         tmux send-keys -t "$SESSION_NAME:overview.3" "watch -n 1 'echo \"=== QA ===\"; tmux capture-pane -t $SESSION_NAME:qa.0 -p -J | grep \".\" | tail -12'" Enter
-        tmux send-keys -t "$SESSION_NAME:overview.4" "watch -n 1 'echo \"=== Frontend ===\"; tmux capture-pane -t $SESSION_NAME:engineers.0 -p -J | grep \".\" | tail -12'" Enter
-        tmux send-keys -t "$SESSION_NAME:overview.5" "watch -n 1 'echo \"=== Backend ===\"; tmux capture-pane -t $SESSION_NAME:engineers.1 -p -J | grep \".\" | tail -12'" Enter
-        tmux send-keys -t "$SESSION_NAME:overview.6" "watch -n 1 'echo \"=== Security ===\"; tmux capture-pane -t $SESSION_NAME:engineers.2 -p -J | grep \".\" | tail -12'" Enter
+        tmux send-keys -t "$SESSION_NAME:overview.4" "watch -n 1 'echo \"=== PerfAnl ===\"; tmux capture-pane -t $SESSION_NAME:perf.0 -p -J | grep \".\" | tail -12'" Enter
+        tmux send-keys -t "$SESSION_NAME:overview.5" "watch -n 1 'echo \"=== Frontend ===\"; tmux capture-pane -t $SESSION_NAME:engineers.0 -p -J | grep \".\" | tail -12'" Enter
+        tmux send-keys -t "$SESSION_NAME:overview.6" "watch -n 1 'echo \"=== Backend ===\"; tmux capture-pane -t $SESSION_NAME:engineers.1 -p -J | grep \".\" | tail -12'" Enter
+        tmux send-keys -t "$SESSION_NAME:overview.7" "watch -n 1 'echo \"=== Security ===\"; tmux capture-pane -t $SESSION_NAME:engineers.2 -p -J | grep \".\" | tail -12'" Enter
 
         # ダッシュボードウィンドウ
         tmux new-window -t "$SESSION_NAME" -n "dashboard"
@@ -314,9 +328,10 @@ start_session() {
     echo "  2: intern    - Intern AI (Codex)"
     echo "  3: engineers - Frontend / Backend / Security"
     echo "  4: qa        - QA AI (Chrome連携)"
-    echo "  5: monitor   - 共有ディレクトリ監視"
-    echo "  6: overview  - 7分割オーバービュー（Ctrl+b 6 で表示）"
-    echo "  7: dashboard - エージェント状態サマリー（Ctrl+b 7 で表示）"
+    echo "  5: perf      - Performance Analyst AI"
+    echo "  6: monitor   - 共有ディレクトリ監視"
+    echo "  7: overview  - 8分割オーバービュー（Ctrl+b 7 で表示）"
+    echo "  8: dashboard - エージェント状態サマリー（Ctrl+b 8 で表示）"
     echo ""
     echo "アタッチするには: tmux attach -t $SESSION_NAME"
     echo "または: $0 attach"

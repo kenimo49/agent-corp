@@ -59,6 +59,28 @@ humanize_filename() {
         | tr '-' ' '
 }
 
+# タスクファイル名からestimate JSONの予測時間（分）を取得
+get_estimate_minutes() {
+    local task_file="$1"
+    if [ -z "$task_file" ]; then
+        echo ""
+        return
+    fi
+    local base
+    base=$(echo "$task_file" | sed 's/\.md$//')
+    for est_file in "$SHARED"/.estimates/*/"${base}-estimate.json"; do
+        if [ -f "$est_file" ]; then
+            local mins
+            mins=$(jq -r '.estimated_duration_minutes // empty' "$est_file" 2>/dev/null)
+            if [ -n "$mins" ]; then
+                echo "$mins"
+                return
+            fi
+        fi
+    done
+    echo ""
+}
+
 # HH:MM:SS から経過時間を計算
 elapsed_from() {
     local ts="$1"
@@ -91,7 +113,7 @@ get_status() {
     lines=$(tmux capture-pane -t "$target" -p -J 2>/dev/null | grep '.' | tail -30)
 
     if [ -z "$lines" ]; then
-        echo "IDLE|−|待機中||"
+        echo "IDLE|−|待機中|||"
         return
     fi
 
@@ -136,7 +158,7 @@ get_status() {
             detail="タスク実行中"
         fi
 
-        echo "BUSY|処理中|$detail|$start_ts|$last_ts"
+        echo "BUSY|処理中|$detail|$start_ts|$last_ts|$task_file"
 
     elif echo "$last_line" | grep -q '\[OK\]'; then
         local detail
@@ -144,25 +166,25 @@ get_status() {
         if echo "$detail" | grep -q 'レポート作成\|報告を作成\|指示を作成\|タスク作成'; then
             local filename
             filename=$(echo "$detail" | grep -oP '[^/]+$')
-            echo "DONE|完了|$(humanize_filename "$filename")||$last_ts"
+            echo "DONE|完了|$(humanize_filename "$filename")||$last_ts|"
         else
-            echo "DONE|完了|$detail||$last_ts"
+            echo "DONE|完了|$detail||$last_ts|"
         fi
 
     elif echo "$last_line" | grep -q '\[ERROR\]'; then
         local detail
         detail=$(echo "$last_line" | sed 's/.*\[ERROR\] //')
-        echo "ERROR|エラー|$detail||$last_ts"
+        echo "ERROR|エラー|$detail||$last_ts|"
 
     elif echo "$last_line" | grep -q '監視:'; then
-        echo "WATCH|待機|新しいタスクを待っています||$last_ts"
+        echo "WATCH|待機|新しいタスクを待っています||$last_ts|"
 
     elif echo "$last_line" | grep -q '人間への報告完了'; then
         local filename
         filename=$(echo "$last_line" | grep -oP '報告完了 - \K.*')
-        echo "DONE|報告済|$(humanize_filename "$filename")||$last_ts"
+        echo "DONE|報告済|$(humanize_filename "$filename")||$last_ts|"
     else
-        echo "ACTIVE|稼働中|稼働中||$last_ts"
+        echo "ACTIVE|稼働中|稼働中||$last_ts|"
     fi
 }
 
@@ -209,8 +231,8 @@ echo -e "${DIM}  ─────────────────────
 echo ""
 
 # ヘッダー
-printf "  ${DIM}%-10s %-8s  %-36s %8s %8s${RESET}\n" "Agent" "Status" "Task" "開始" "経過"
-echo -e "  ${DIM}─────────────────────────────────────────────────────────────────────────${RESET}"
+printf "  ${DIM}%-10s %-8s  %-32s %8s %10s${RESET}\n" "Agent" "Status" "Task" "開始" "経過/予測"
+echo -e "  ${DIM}──────────────────────────────────────────────────────────────────────────${RESET}"
 
 # 各エージェント
 agents=(
@@ -221,19 +243,21 @@ agents=(
     "Backend|${SESSION_NAME}:engineers.1"
     "Security|${SESSION_NAME}:engineers.2"
     "QA|${SESSION_NAME}:qa.0"
+    "PerfAnl|${SESSION_NAME}:perf.0"
 )
 
 for agent_info in "${agents[@]}"; do
     IFS='|' read -r name target <<< "$agent_info"
     _raw="$(get_status "$target")"
 
-    # パース: STATUS|LABEL|DETAIL|START_TS|LAST_TS
+    # パース: STATUS|LABEL|DETAIL|START_TS|LAST_TS|TASK_FILE
     status="${_raw%%|*}"; _raw="${_raw#*|}"
     label="${_raw%%|*}"; _raw="${_raw#*|}"
     detail="${_raw%%|*}"; _raw="${_raw#*|}"
-    start_ts="${_raw%%|*}"; last_ts="${_raw#*|}"
+    start_ts="${_raw%%|*}"; _raw="${_raw#*|}"
+    last_ts="${_raw%%|*}"; task_file="${_raw#*|}"
 
-    detail=$(truncate "$detail" 36)
+    detail=$(truncate "$detail" 32)
 
     # 時刻表示
     local_start=""
@@ -241,15 +265,31 @@ for agent_info in "${agents[@]}"; do
     if [ "$status" = "BUSY" ] && [ -n "$start_ts" ]; then
         local_start="$start_ts"
         local_elapsed=$(elapsed_from "$start_ts")
-        # 経過が長い場合は赤で強調
         elapsed_s=0
         if [ -n "$start_ts" ]; then
             elapsed_s=$(( $(date +%s) - $(date -d "$start_ts" +%s 2>/dev/null || echo "$(date +%s)") ))
         fi
-        if [ "$elapsed_s" -ge 600 ]; then
-            local_elapsed="${RED}${local_elapsed}${RESET}"
-        elif [ "$elapsed_s" -ge 300 ]; then
-            local_elapsed="${YELLOW}${local_elapsed}${RESET}"
+
+        # 見積もり時間を取得して表示
+        est_min=$(get_estimate_minutes "$task_file")
+        if [ -n "$est_min" ]; then
+            est_sec=$(( est_min * 60 ))
+            if [ "$elapsed_s" -ge $(( est_sec * 3 / 2 )) ]; then
+                # 1.5倍超過 → 赤
+                local_elapsed="${RED}${local_elapsed}/${est_min}m${RESET}"
+            elif [ "$elapsed_s" -ge "$est_sec" ]; then
+                # 超過 → 黄
+                local_elapsed="${YELLOW}${local_elapsed}/${est_min}m${RESET}"
+            else
+                local_elapsed="${local_elapsed}/${est_min}m"
+            fi
+        else
+            # 見積もりなし: 従来の経過時間のみ
+            if [ "$elapsed_s" -ge 600 ]; then
+                local_elapsed="${RED}${local_elapsed}${RESET}"
+            elif [ "$elapsed_s" -ge 300 ]; then
+                local_elapsed="${YELLOW}${local_elapsed}${RESET}"
+            fi
         fi
     elif [ -n "$last_ts" ]; then
         local_start=""
@@ -258,7 +298,7 @@ for agent_info in "${agents[@]}"; do
 
     printf "  %-10s " "$name"
     colored_status "$status" "$label"
-    printf "  %-36s " "$detail"
+    printf "  %-32s " "$detail"
     printf "%8s " "$local_start"
     printf "%b\n" "${local_elapsed:-${DIM}-${RESET}}"
 done
@@ -275,5 +315,5 @@ local_bug=$(count_files "$SHARED/bugs")
 
 echo -e "  ${DIM}要件:${RESET} ${local_req}  ${DIM}指示:${RESET} ${local_inst}  ${DIM}タスク:${RESET} ${local_task}  ${DIM}報告:${RESET} ${local_report}  ${DIM}バグ:${RESET} ${local_bug}"
 echo ""
-echo -e "  ${DIM}経過 5m以上=${RESET}${YELLOW}黄${RESET}  ${DIM}10m以上=${RESET}${RED}赤${RESET}"
+echo -e "  ${DIM}経過/予測: 超過=${RESET}${YELLOW}黄${RESET}  ${DIM}1.5x超過=${RESET}${RED}赤${RESET}  ${DIM}(見積もりなし: 5m=${RESET}${YELLOW}黄${RESET} ${DIM}10m=${RESET}${RED}赤${RESET}${DIM})${RESET}"
 echo ""
