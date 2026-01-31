@@ -19,20 +19,24 @@ log_success() { echo -e "\033[0;32m[OK]\033[0m $1"; }
 log_error() { echo -e "\033[0;31m[ERROR]\033[0m $1"; }
 
 # LLMコマンド実行（LLM非依存）
+# 引数: $1=システムプロンプト, $2=タスクプロンプト
 execute_llm() {
-    local full_prompt=$1
+    local system_prompt="$1"
+    local task_prompt="$2"
 
     case $LLM_TYPE in
         claude)
-            claude -p "$full_prompt" 2>&1
+            claude -p "$task_prompt" \
+                --system-prompt "$system_prompt" \
+                --allowedTools "Bash,Edit,Read,Write" \
+                --add-dir "$TARGET_PROJECT" \
+                --dangerously-skip-permissions 2>&1
             ;;
         codex)
-            codex exec "$full_prompt" 2>&1
+            codex exec "$system_prompt
+
+$task_prompt" 2>&1
             ;;
-        # gemini)
-        #     # Geminiは現在無効（標準入力の問題あり）
-        #     gemini -p "$full_prompt" < /dev/null 2>&1
-        #     ;;
         *)
             log_error "未対応のLLMタイプ: $LLM_TYPE"
             return 1
@@ -50,7 +54,7 @@ get_project_context() {
 
     # コンテキスト解析スクリプトを実行
     local context
-    context=$("$PROJECT_DIR/scripts/analyze-context.sh" "$PROJECT_DIR" "$task_content" 2>/dev/null) || {
+    context=$("$PROJECT_DIR/scripts/analyze-context.sh" "$TARGET_PROJECT" "$task_content" 2>/dev/null) || {
         log_error "RAGコンテキスト生成に失敗"
         return 0
     }
@@ -58,11 +62,10 @@ get_project_context() {
     echo "$context"
 }
 
-# RAGコンテキストをプロンプトに注入
-inject_rag_context() {
-    local system_prompt="$1"
-    local task_content="$2"
-    local task_prompt="$3"
+# RAGコンテキストをタスクプロンプトに注入（システムプロンプトは分離）
+build_task_prompt() {
+    local task_content="$1"
+    local task_prompt="$2"
 
     local rag_context=""
     if is_rag_enabled; then
@@ -70,19 +73,13 @@ inject_rag_context() {
     fi
 
     if [ -n "$rag_context" ]; then
-        echo "$system_prompt
-
----
-[プロジェクトコンテキスト]
+        echo "[プロジェクトコンテキスト]
 $rag_context
 
 ---
 $task_prompt"
     else
-        echo "$system_prompt
-
----
-$task_prompt"
+        echo "$task_prompt"
     fi
 }
 
@@ -165,11 +162,11 @@ run_ceo() {
 ---
 $content"
 
-            local full_prompt
-            full_prompt=$(inject_rag_context "$system_prompt" "$content" "$task_prompt")
+            local final_task_prompt
+            final_task_prompt=$(build_task_prompt "$content" "$task_prompt")
 
             log_info "$LLM_TYPE APIで処理中..."
-            response=$(execute_llm "$full_prompt") || {
+            response=$(execute_llm "$system_prompt" "$final_task_prompt") || {
                 log_error "$LLM_TYPE API エラー"
                 continue
             }
@@ -197,11 +194,11 @@ $content"
 ---
 $content"
 
-            local full_prompt
-            full_prompt=$(inject_rag_context "$system_prompt" "$content" "$task_prompt")
+            local final_task_prompt
+            final_task_prompt=$(build_task_prompt "$content" "$task_prompt")
 
             log_info "最終報告を作成中..."
-            response=$(execute_llm "$full_prompt") || {
+            response=$(execute_llm "$system_prompt" "$final_task_prompt") || {
                 log_error "$LLM_TYPE API エラー"
                 continue
             }
@@ -230,11 +227,11 @@ $content"
 ---
 $content"
 
-            local full_prompt
-            full_prompt=$(inject_rag_context "$system_prompt" "$content" "$task_prompt")
+            local final_task_prompt
+            final_task_prompt=$(build_task_prompt "$content" "$task_prompt")
 
             log_info "最終報告を作成中..."
-            response=$(execute_llm "$full_prompt") || {
+            response=$(execute_llm "$system_prompt" "$final_task_prompt") || {
                 log_error "$LLM_TYPE API エラー"
                 continue
             }
@@ -289,11 +286,11 @@ run_pm() {
 ---
 $content"
 
-            local full_prompt
-            full_prompt=$(inject_rag_context "$system_prompt" "$content" "$task_prompt")
+            local final_task_prompt
+            final_task_prompt=$(build_task_prompt "$content" "$task_prompt")
 
             log_info "$LLM_TYPE APIで処理中..."
-            response=$(execute_llm "$full_prompt") || {
+            response=$(execute_llm "$system_prompt" "$final_task_prompt") || {
                 log_error "$LLM_TYPE API エラー"
                 continue
             }
@@ -340,11 +337,11 @@ $content"
 ---
 $content"
 
-                local full_prompt
-                full_prompt=$(inject_rag_context "$system_prompt" "$content" "$task_prompt")
+                local final_task_prompt
+                final_task_prompt=$(build_task_prompt "$content" "$task_prompt")
 
                 log_info "CEOへの報告を作成中..."
-                response=$(execute_llm "$full_prompt") || {
+                response=$(execute_llm "$system_prompt" "$final_task_prompt") || {
                     log_error "$LLM_TYPE API エラー"
                     continue
                 }
@@ -388,11 +385,11 @@ run_intern() {
 ---
 $content"
 
-            local full_prompt
-            full_prompt=$(inject_rag_context "$system_prompt" "$content" "$task_prompt")
+            local final_task_prompt
+            final_task_prompt=$(build_task_prompt "$content" "$task_prompt")
 
             log_info "$LLM_TYPE APIで処理中..."
-            response=$(execute_llm "$full_prompt") || {
+            response=$(execute_llm "$system_prompt" "$final_task_prompt") || {
                 log_error "$LLM_TYPE API エラー"
                 continue
             }
@@ -433,11 +430,11 @@ run_engineer() {
 ---
 $content"
 
-            local full_prompt
-            full_prompt=$(inject_rag_context "$system_prompt" "$content" "$task_prompt")
+            local final_task_prompt
+            final_task_prompt=$(build_task_prompt "$content" "$task_prompt")
 
             log_info "$LLM_TYPE APIで処理中..."
-            response=$(execute_llm "$full_prompt") || {
+            response=$(execute_llm "$system_prompt" "$final_task_prompt") || {
                 log_error "$LLM_TYPE API エラー"
                 continue
             }

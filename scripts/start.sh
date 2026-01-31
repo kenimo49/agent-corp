@@ -9,6 +9,9 @@ set -e
 SESSION_NAME="agent-corp"
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
+# RAG・ターゲットプロジェクト設定の読み込み
+source "$PROJECT_DIR/scripts/config.sh"
+
 # 色付きログ
 log_info() { echo -e "\033[0;34m[INFO]\033[0m $1"; }
 log_success() { echo -e "\033[0;32m[OK]\033[0m $1"; }
@@ -125,7 +128,7 @@ get_agent_command() {
     case $llm_type in
         claude)
             # Claude Code を使用（システムプロンプトを設定して対話モードで起動）
-            echo "cd $PROJECT_DIR && claude --system-prompt \"\$(cat '$prompt_file')\""
+            echo "cd $PROJECT_DIR && claude --system-prompt \"\$(cat '$prompt_file')\" --add-dir \"$TARGET_PROJECT\" --allowedTools \"Bash,Edit,Read,Write\" --dangerously-skip-permissions"
             ;;
         claude-loop)
             # claude -p をループで使用（自動監視モード）
@@ -133,7 +136,7 @@ get_agent_command() {
             ;;
         codex)
             # OpenAI Codex CLI を使用（対話モード）
-            echo "cd $PROJECT_DIR && codex"
+            echo "cd $TARGET_PROJECT && codex"
             ;;
         codex-loop)
             # codex -p をループで使用（自動監視モード）
@@ -279,6 +282,7 @@ start_session() {
     fi
 
     log_success "セッション '$SESSION_NAME' を作成しました"
+    log_info "ターゲットプロジェクト: $TARGET_PROJECT"
 
     # 初期プロンプトを送信（LLMが起動するまで待機してから）
     if [ "$dry_run" != true ]; then
