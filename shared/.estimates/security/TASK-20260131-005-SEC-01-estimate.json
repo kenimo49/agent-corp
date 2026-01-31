@@ -1,0 +1,15 @@
+{
+  "task_file": "TASK-20260131-005-SEC-01.md",
+  "role": "security",
+  "estimated_at": "2026-01-31T13:33:13Z",
+  "estimated_duration_minutes": 90,
+  "estimated_complexity": "medium",
+  "description": "ログイン機能E2Eテストのセキュリティレビューとテストケース提案",
+  "subtasks": [
+    "既存E2Eテスト・認証コードのセキュリティレビュー",
+    "OWASP Top 10に基づくリスク評価",
+    "不足セキュリティテストケースの特定と優先度付け",
+    "セキュリティ改善推奨事項の策定",
+    "レビューレポート作成"
+  ]
+}
