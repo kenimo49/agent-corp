@@ -117,6 +117,7 @@ Roles:
     frontend    Frontendエンジニア（tasks/frontend → reports）
     backend     Backendエンジニア（tasks/backend → reports）
     security    Securityエンジニア（tasks/security → reports）
+    qa          QA（tasks/qa → reports/qa）
 
 LLM Types:
     claude      Claude Code（デフォルト）
@@ -312,6 +313,9 @@ run_pm() {
 ### SECURITY_TASK
 （セキュリティエンジニアへのタスク内容）
 
+### QA_TASK
+（QAへのテスト依頼。実装完了後の動作確認・リリース判定。該当なしの場合もあり）
+
 ---
 指示ファイル: $file
 ---
@@ -333,6 +337,7 @@ $content"
                 /^#{2,3}\s*FRONTEND[_\s-]*TASK/ { section="frontend"; next }
                 /^#{2,3}\s*BACKEND[_\s-]*TASK/ { section="backend"; next }
                 /^#{2,3}\s*SECURITY[_\s-]*TASK/ { section="security"; next }
+                /^#{2,3}\s*QA[_\s-]*TASK/ { section="qa"; next }
                 /^#{2,3}\s/ { section="" }
                 section != "" && !/^該当なし/ && !/^[Nn]\/?[Aa]/ && !/^なし/ && !/^\s*$/ {
                     print section "\t" $0
@@ -345,7 +350,7 @@ $content"
 
             # タスクファイルが作成されたか確認
             local tasks_created=false
-            for role in frontend backend security; do
+            for role in frontend backend security qa; do
                 if [ -f "$output_dir/${role}/${basename}-task.md" ]; then
                     log_success "タスク作成: tasks/${role}/${basename}-task.md"
                     tasks_created=true
@@ -354,15 +359,20 @@ $content"
 
             if [ "$tasks_created" = false ]; then
                 log_error "タスクファイルが作成されませんでした。LLMの出力形式を確認してください。"
-                log_info "期待形式: ### FRONTEND_TASK / ### BACKEND_TASK / ### SECURITY_TASK"
+                log_info "期待形式: ### FRONTEND_TASK / ### BACKEND_TASK / ### SECURITY_TASK / ### QA_TASK"
             fi
 
             mark_processed "$file"
         done
 
         # 2. エンジニアからの報告を集約してCEOに報告
-        for role in frontend backend security; do
-            for file in "$report_watch_dir/$role"/*.md; do
+        for role in frontend backend security qa; do
+            local role_report_dir="$report_watch_dir/$role"
+            # QAはreports/qa/に報告を書く
+            if [ "$role" = "qa" ]; then
+                role_report_dir="$PROJECT_DIR/shared/reports/qa"
+            fi
+            for file in "$role_report_dir"/*.md; do
                 [ -f "$file" ] || continue
                 is_processed "$file" && continue
 
@@ -452,11 +462,17 @@ run_engineer() {
     local output_dir="$PROJECT_DIR/shared/reports/engineers/$role"
     local prompt_file="$PROJECT_DIR/prompts/engineers/${role}.md"
 
+    # QAはprompts/qa.md、reports/qa/ を使用
+    if [ "$role" = "qa" ]; then
+        prompt_file="$PROJECT_DIR/prompts/qa.md"
+        output_dir="$PROJECT_DIR/shared/reports/qa"
+    fi
+
     validate_environment "$role" "$prompt_file"
     mkdir -p "$watch_dir" "$output_dir"
 
-    # frontendロールはClaude in Chrome連携を有効化（UI挙動チェック用）
-    if [ "$role" = "frontend" ]; then
+    # frontend/qaロールはClaude in Chrome連携を有効化（UI挙動チェック用）
+    if [ "$role" = "frontend" ] || [ "$role" = "qa" ]; then
         export ENABLE_CHROME=1
         log_info "$role Engineer Agent 起動 - 監視: $watch_dir (Chrome連携: 有効)"
     else
@@ -476,7 +492,25 @@ run_engineer() {
             local output_file="$output_dir/${basename}-report.md"
 
             local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a $role engineer.")
-            local task_prompt="以下のタスクを実行し、結果を報告してください。
+            local task_prompt=""
+
+            if [ "$role" = "qa" ]; then
+                task_prompt="以下のテスト依頼を実施し、結果を報告してください。
+
+## テスト手順（必須）
+1. 開発サーバーを起動する（npm run dev 等）
+2. ブラウザでテスト対象ページを開く（navigate）
+3. スクリーンショットで画面表示を確認する
+4. ユースケースに沿ってUI操作テストを実施する（フォーム入力、ボタンクリック、画面遷移）
+5. コンソールエラーがないか確認する（read_console_messages）
+6. テスト結果をまとめ、リリース判定（GO/NO-GO/CONDITIONAL）を行う
+7. 発見したバグは再現手順付きで報告する
+
+タスクファイル: $file
+---
+$content"
+            else
+                task_prompt="以下のタスクを実行し、結果を報告してください。
 
 ## Git運用ルール（必須）
 1. 作業前に \`develop\` ブランチから feature/ または fix/ ブランチを作成すること
@@ -490,6 +524,7 @@ run_engineer() {
 タスクファイル: $file
 ---
 $content"
+            fi
 
             local final_task_prompt
             final_task_prompt=$(build_task_prompt "$content" "$task_prompt")
@@ -532,7 +567,7 @@ main() {
         intern)
             run_intern
             ;;
-        frontend|backend|security)
+        frontend|backend|security|qa)
             run_engineer "$role"
             ;;
         help|--help|-h)
