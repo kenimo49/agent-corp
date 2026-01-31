@@ -676,11 +676,14 @@ run_engineer() {
                 task_prompt="${estimate_instruction}以下のテスト依頼を実施し、結果を報告してください。
 
 ## テスト手順（必須）
-1. 開発サーバーを起動する（npm run dev 等）
-2. ブラウザでテスト対象ページを開く（navigate）
-3. スクリーンショットで画面表示を確認する
-4. ユースケースに沿ってUI操作テストを実施する（フォーム入力、ボタンクリック、画面遷移）
-5. コンソールエラーがないか確認する（read_console_messages）
+1. プロジェクト構造を確認し、Playwrightのセットアップ状態を確認する
+2. Playwrightが未導入なら初期セットアップを行う（npm install -D @playwright/test && npx playwright install --with-deps chromium）
+3. テスト依頼の内容に基づき、Playwright E2Eテストを作成する（tests/e2e/*.spec.ts）
+4. 開発サーバーを起動し、npx playwright test を実行する
+5. テストが失敗した場合、Claude in Chrome（ブラウザツール）で該当ページを開き、探索的にデバッグする
+   - スクリーンショットで画面表示を確認
+   - コンソールエラーの確認（read_console_messages）
+   - UI操作で再現確認
 6. テスト結果をまとめ、リリース判定（GO/NO-GO/CONDITIONAL）を行う
 7. 発見したバグは再現手順付きで報告する
 
