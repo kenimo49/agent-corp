@@ -268,12 +268,13 @@ start_session() {
         tmux select-layout -t "$SESSION_NAME:overview" tiled
 
         # 各ペインで対応するエージェントの画面をリアルタイム監視
-        tmux send-keys -t "$SESSION_NAME:overview.0" "watch -n 1 'echo \"=== CEO ===\"; tmux capture-pane -t $SESSION_NAME:ceo -p | tail -12'" Enter
-        tmux send-keys -t "$SESSION_NAME:overview.1" "watch -n 1 'echo \"=== PM ===\"; tmux capture-pane -t $SESSION_NAME:pm -p | tail -12'" Enter
-        tmux send-keys -t "$SESSION_NAME:overview.2" "watch -n 1 'echo \"=== Intern (Codex) ===\"; tmux capture-pane -t $SESSION_NAME:intern -p | tail -12'" Enter
-        tmux send-keys -t "$SESSION_NAME:overview.3" "watch -n 1 'echo \"=== Frontend ===\"; tmux capture-pane -t $SESSION_NAME:engineers.0 -p | tail -12'" Enter
-        tmux send-keys -t "$SESSION_NAME:overview.4" "watch -n 1 'echo \"=== Backend ===\"; tmux capture-pane -t $SESSION_NAME:engineers.1 -p | tail -12'" Enter
-        tmux send-keys -t "$SESSION_NAME:overview.5" "watch -n 1 'echo \"=== Security ===\"; tmux capture-pane -t $SESSION_NAME:engineers.2 -p | tail -12'" Enter
+        # Note: grep '.' で空行を除去してからtailすることで、実際の出力のみ表示
+        tmux send-keys -t "$SESSION_NAME:overview.0" "watch -n 1 'echo \"=== CEO ===\"; tmux capture-pane -t $SESSION_NAME:ceo.0 -p | grep \".\" | tail -12'" Enter
+        tmux send-keys -t "$SESSION_NAME:overview.1" "watch -n 1 'echo \"=== PM ===\"; tmux capture-pane -t $SESSION_NAME:pm.0 -p | grep \".\" | tail -12'" Enter
+        tmux send-keys -t "$SESSION_NAME:overview.2" "watch -n 1 'echo \"=== Intern (Codex) ===\"; tmux capture-pane -t $SESSION_NAME:intern.0 -p | grep \".\" | tail -12'" Enter
+        tmux send-keys -t "$SESSION_NAME:overview.3" "watch -n 1 'echo \"=== Frontend ===\"; tmux capture-pane -t $SESSION_NAME:engineers.0 -p | grep \".\" | tail -12'" Enter
+        tmux send-keys -t "$SESSION_NAME:overview.4" "watch -n 1 'echo \"=== Backend ===\"; tmux capture-pane -t $SESSION_NAME:engineers.1 -p | grep \".\" | tail -12'" Enter
+        tmux send-keys -t "$SESSION_NAME:overview.5" "watch -n 1 'echo \"=== Security ===\"; tmux capture-pane -t $SESSION_NAME:engineers.2 -p | grep \".\" | tail -12'" Enter
     fi
 
     # CEOウィンドウを選択
