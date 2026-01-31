@@ -296,24 +296,35 @@ $content"
             }
 
             # セクションごとにタスクを抽出して保存
+            # ヘッダーの大文字小文字・空白揺れに対応し、TAB区切りでコロン衝突を回避
             echo "$response" | awk '
-                /^### FRONTEND_TASK/ { section="frontend"; next }
-                /^### BACKEND_TASK/ { section="backend"; next }
-                /^### SECURITY_TASK/ { section="security"; next }
-                /^###/ { section="" }
-                section != "" && !/^該当なし/ { print section ":" $0 }
-            ' | while IFS=: read -r role line; do
+                BEGIN { IGNORECASE=1 }
+                /^#{2,3}\s*FRONTEND[_\s-]*TASK/ { section="frontend"; next }
+                /^#{2,3}\s*BACKEND[_\s-]*TASK/ { section="backend"; next }
+                /^#{2,3}\s*SECURITY[_\s-]*TASK/ { section="security"; next }
+                /^#{2,3}\s/ { section="" }
+                section != "" && !/^該当なし/ && !/^[Nn]\/?[Aa]/ && !/^なし/ && !/^\s*$/ {
+                    print section "\t" $0
+                }
+            ' | while IFS=$'\t' read -r role line; do
                 if [ -n "$role" ] && [ -n "$line" ]; then
                     echo "$line" >> "$output_dir/${role}/${basename}-task.md"
                 fi
             done
 
             # タスクファイルが作成されたか確認
+            local tasks_created=false
             for role in frontend backend security; do
                 if [ -f "$output_dir/${role}/${basename}-task.md" ]; then
                     log_success "タスク作成: tasks/${role}/${basename}-task.md"
+                    tasks_created=true
                 fi
             done
+
+            if [ "$tasks_created" = false ]; then
+                log_error "タスクファイルが作成されませんでした。LLMの出力形式を確認してください。"
+                log_info "期待形式: ### FRONTEND_TASK / ### BACKEND_TASK / ### SECURITY_TASK"
+            fi
 
             mark_processed "$file"
         done

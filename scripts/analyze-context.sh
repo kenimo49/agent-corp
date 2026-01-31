@@ -7,6 +7,13 @@ set -e
 
 PROJECT_DIR="${1:-.}"
 TASK_CONTENT="${2:-}"
+
+# config.shからRAG設定を読み込み（is_cache_valid等を利用）
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "$SCRIPT_DIR/config.sh" ]; then
+    source "$SCRIPT_DIR/config.sh"
+fi
+
 KNOWLEDGE_DIR="${AGENT_KNOWLEDGE_DIR:-$HOME/.agent-corp/knowledge}"
 RAG_CONTEXT_MAX_LINES="${RAG_CONTEXT_MAX_LINES:-200}"
 
@@ -147,8 +154,19 @@ find_related_files() {
     echo "## タスク関連ファイル"
     echo ""
 
-    # タスク内容からキーワード抽出（4文字以上の英単語）
-    local keywords=$(echo "$TASK_CONTENT" | grep -oE '[A-Za-z]{4,}' | sort -u | head -8)
+    # タスク内容からキーワード抽出（英単語 + 日本語の主要名詞）
+    local keywords=""
+
+    # 英単語（4文字以上）
+    local en_kw=$(echo "$TASK_CONTENT" | grep -oE '[A-Za-z]{4,}' | sort -u | head -5)
+
+    # 日本語キーワード（カタカナ語2文字以上、漢字2文字以上）
+    local ja_kw=""
+    if echo "$TASK_CONTENT" | grep -qP '[ぁ-ヿ㐀-䶵一-鿋豈-頻々〇〻\x{3400}-\x{9FFF}\x{F900}-\x{FAFF}]' 2>/dev/null; then
+        ja_kw=$(echo "$TASK_CONTENT" | grep -oP '[ァ-ヶー]{2,}|[㐀-䶵一-鿋豈-頻々〇〻\x{3400}-\x{9FFF}\x{F900}-\x{FAFF}]{2,}' 2>/dev/null | sort -u | head -5)
+    fi
+
+    keywords=$(echo "$en_kw $ja_kw" | xargs)
 
     if [ -z "$keywords" ]; then
         echo "（キーワードが抽出できませんでした）"
@@ -168,6 +186,8 @@ find_related_files() {
             --include="*.go" \
             --include="*.rs" \
             --include="*.md" \
+            --include="*.yaml" --include="*.yml" \
+            --include="*.json" \
             2>/dev/null | \
             grep -v 'node_modules' | \
             grep -v '.git' | \
@@ -311,43 +331,64 @@ include_global_knowledge() {
     fi
 }
 
-# メイン: コンテキスト生成
-generate_context() {
-    {
-        echo "# プロジェクトコンテキスト"
-        echo ""
-        echo "**生成日時:** $(date '+%Y-%m-%d %H:%M:%S')"
-        echo "**プロジェクトパス:** $(cd "$PROJECT_DIR" && pwd)"
-        echo ""
-        echo "---"
-        echo ""
+# ヘルパー: セクション出力を行数制限付きで出力
+# 各セクションに個別の制限をかけることで、特定セクションが全体を圧迫するのを防ぐ
+output_section() {
+    local max_lines=${1:-50}
+    local content
+    content=$(cat)
+    local line_count=$(echo "$content" | wc -l)
 
-        generate_structure
-        echo ""
-
-        detect_tech_stack
-        echo ""
-
-        find_related_files
-        echo ""
-
-        detect_api_endpoints
-        echo ""
-
-        detect_db_schema
-        echo ""
-
-        read_docs
-        echo ""
-
-        include_global_knowledge
-
-    } | head -$RAG_CONTEXT_MAX_LINES
+    if [ "$line_count" -le "$max_lines" ]; then
+        echo "$content"
+    else
+        echo "$content" | head -$max_lines
+        echo "（... 以降省略。全${line_count}行中${max_lines}行を表示）"
+    fi
 }
 
-# 出力生成
-output_file="$PROJECT_KNOWLEDGE_DIR/context-cache.md"
-generate_context > "$output_file"
+# メイン: コンテキスト生成
+# セクションごとに行数制限をかけ、重要なセクションが確実に含まれるようにする
+generate_context() {
+    echo "# プロジェクトコンテキスト"
+    echo ""
+    echo "**生成日時:** $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "**プロジェクトパス:** $(cd "$PROJECT_DIR" && pwd)"
+    echo ""
+    echo "---"
+    echo ""
 
-# 結果を標準出力にも出力
-cat "$output_file"
+    # 各セクションに個別の行数制限を設定
+    # 合計: 40+50+30+20+20+40+20 = 220行程度（RAG_CONTEXT_MAX_LINESのデフォルト200に近い）
+    generate_structure | output_section 40
+    echo ""
+
+    detect_tech_stack | output_section 50
+    echo ""
+
+    find_related_files | output_section 30
+    echo ""
+
+    detect_api_endpoints | output_section 20
+    echo ""
+
+    detect_db_schema | output_section 20
+    echo ""
+
+    read_docs | output_section 40
+    echo ""
+
+    include_global_knowledge | output_section 20
+}
+
+# 出力生成（キャッシュが有効ならスキップ）
+output_file="$PROJECT_KNOWLEDGE_DIR/context-cache.md"
+
+if type is_cache_valid &>/dev/null && is_cache_valid "$output_file"; then
+    # キャッシュが有効 → 再生成をスキップ
+    cat "$output_file"
+else
+    # キャッシュ無効 or TTL=0 → 再生成
+    generate_context > "$output_file"
+    cat "$output_file"
+fi
