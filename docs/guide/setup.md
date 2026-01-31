@@ -240,16 +240,107 @@ agent-corp (tmux session)
 
 ---
 
+## ターゲットプロジェクトの設定
+
+agent-corpはフレームワークであり、エージェントが実際に開発するプロダクトは別のリポジトリに配置します。`.env` にターゲットプロジェクトのパスを設定することで、エージェントがそのプロジェクトのコードを読み書きできるようになります。
+
+### 基本設定
+
+```bash
+# .envファイルを作成
+cp .env.example .env
+
+# ターゲットプロジェクトのパスを設定
+echo 'TARGET_PROJECT=/home/you/workspace/your-project' > .env
+```
+
+### 設定の確認
+
+```bash
+# 設定が正しく読み込まれるか確認
+source scripts/config.sh && echo $TARGET_PROJECT
+
+# ターゲットプロジェクトのコンテキストが解析されるか確認
+./scripts/analyze-context.sh "$TARGET_PROJECT" | head -30
+
+# dry-runで起動コマンドを確認
+./scripts/start.sh start --dry-run
+```
+
+### ディレクトリ構成のイメージ
+
+```
+~/workspace/
+├── agent-corp/              # フレームワーク（ここから起動）
+│   ├── .env                 # TARGET_PROJECT=/home/you/workspace/your-project
+│   ├── prompts/             # エージェントのロール定義
+│   ├── shared/              # エージェント間通信
+│   └── scripts/             # 起動・管理スクリプト
+│
+└── your-project/            # ターゲットプロジェクト（エージェントの作業対象）
+    ├── src/
+    ├── package.json
+    └── ...
+```
+
+**agent-corp** と **ターゲットプロジェクト** の役割分担：
+
+| 項目 | agent-corp | ターゲットプロジェクト |
+|------|-----------|---------------------|
+| プロンプト定義 | ここにある | - |
+| エージェント間通信 | `shared/` | - |
+| コード実装 | - | ここに書き込む |
+| RAGコンテキスト | - | ここを解析する |
+| gitリポジトリ | 独立 | 独立 |
+
+### 動作の仕組み
+
+`.env` で `TARGET_PROJECT` を設定すると、以下が自動的に切り替わります：
+
+1. **RAGコンテキスト**: ターゲットプロジェクトのディレクトリ構造・技術スタック・関連ファイルを解析
+2. **claude --add-dir**: エージェントがターゲットプロジェクト内のファイルを読み書き可能に
+3. **claude --allowedTools**: `Bash`, `Edit`, `Read`, `Write` ツールが有効化
+
+### 未設定時の動作
+
+`TARGET_PROJECT` を設定しない場合、agent-corp自身がターゲットになります（フレームワーク自体の開発用途）。
+
+### 複数プロジェクトの切り替え
+
+```bash
+# プロジェクトAを開発
+echo 'TARGET_PROJECT=/home/you/workspace/project-a' > .env
+./scripts/start.sh start
+
+# 停止して別プロジェクトに切り替え
+./scripts/start.sh stop
+echo 'TARGET_PROJECT=/home/you/workspace/project-b' > .env
+./scripts/start.sh start
+```
+
+別のtmuxセッションで同時に複数プロジェクトを動かす場合は、agent-corpを複数クローンするか、環境変数で直接指定してください：
+
+```bash
+TARGET_PROJECT=/path/to/project-b ./scripts/start.sh start
+```
+
+---
+
 ## 設定のカスタマイズ
 
 ### 環境変数
 
-```bash
-# 共有ディレクトリのパス
-export SHARED_DIR="./shared"
+`.env` ファイルに記載するか、環境変数として設定します。`.env` の設定は環境変数で上書き可能です。
 
-# ログレベル
-export LOG_LEVEL="info"  # debug, info, warn, error
+```bash
+# ターゲットプロジェクト（必須）
+TARGET_PROJECT=/home/you/workspace/your-project
+
+# LLMタイプ
+LLM_TYPE=claude
+
+# ポーリング間隔（秒）
+POLL_INTERVAL=5
 ```
 
 ### RAG（コンテキスト自動注入）設定
