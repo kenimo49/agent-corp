@@ -16,7 +16,29 @@ load_project_config "$PROJECT_DIR"
 # 色付きログ
 log_info() { echo -e "\033[0;34m[INFO]\033[0m $1"; }
 log_success() { echo -e "\033[0;32m[OK]\033[0m $1"; }
+log_warn() { echo -e "\033[0;33m[WARN]\033[0m $1"; }
 log_error() { echo -e "\033[0;31m[ERROR]\033[0m $1"; }
+
+# 起動時バリデーション
+validate_environment() {
+    local role=$1
+    local prompt_file=$2
+
+    # TARGET_PROJECTの存在チェック
+    if [ ! -d "$TARGET_PROJECT" ]; then
+        log_error "TARGET_PROJECT が存在しません: $TARGET_PROJECT"
+        log_error ".env を確認してください"
+        exit 1
+    fi
+
+    # プロンプトファイルの存在チェック
+    if [ ! -f "$prompt_file" ]; then
+        log_warn "プロンプトファイルが見つかりません: $prompt_file"
+        log_warn "フォールバックプロンプトを使用します（品質が低下する可能性があります）"
+    fi
+
+    log_info "環境チェック完了 - ロール: $role, TARGET_PROJECT: $TARGET_PROJECT"
+}
 
 # LLMコマンド実行（LLM非依存）
 # 引数: $1=システムプロンプト, $2=タスクプロンプト
@@ -139,6 +161,9 @@ run_ceo() {
     local final_report_dir="$PROJECT_DIR/shared/reports/human"
     local prompt_file="$PROJECT_DIR/prompts/ceo.md"
 
+    validate_environment "ceo" "$prompt_file"
+    mkdir -p "$watch_dir" "$report_dir" "$intern_report_dir" "$output_dir" "$final_report_dir"
+
     log_info "CEO Agent 起動 - 監視: $watch_dir, $report_dir, $intern_report_dir"
     is_rag_enabled && log_info "RAG有効 - ナレッジディレクトリ: $AGENT_KNOWLEDGE_DIR"
 
@@ -252,6 +277,9 @@ run_pm() {
     local report_watch_dir="$PROJECT_DIR/shared/reports/engineers"
     local report_output_dir="$PROJECT_DIR/shared/reports/pm"
     local prompt_file="$PROJECT_DIR/prompts/pm.md"
+
+    validate_environment "pm" "$prompt_file"
+    mkdir -p "$watch_dir" "$output_dir"/{frontend,backend,security} "$report_watch_dir"/{frontend,backend,security} "$report_output_dir"
 
     log_info "PM Agent 起動 - 監視: $watch_dir, $report_watch_dir"
 
@@ -368,12 +396,12 @@ $content"
 }
 
 # Internエージェント
-# TODO: Gemini対応後は gemini をデフォルトに戻す
 run_intern() {
     local watch_dir="$PROJECT_DIR/shared/tasks/intern"
     local output_dir="$PROJECT_DIR/shared/reports/intern"
     local prompt_file="$PROJECT_DIR/prompts/intern.md"
 
+    validate_environment "intern" "$prompt_file"
     mkdir -p "$watch_dir" "$output_dir"
 
     log_info "Intern Agent 起動 - 監視: $watch_dir (LLM: $LLM_TYPE)"
@@ -420,6 +448,9 @@ run_engineer() {
     local watch_dir="$PROJECT_DIR/shared/tasks/$role"
     local output_dir="$PROJECT_DIR/shared/reports/engineers/$role"
     local prompt_file="$PROJECT_DIR/prompts/engineers/${role}.md"
+
+    validate_environment "$role" "$prompt_file"
+    mkdir -p "$watch_dir" "$output_dir"
 
     log_info "$role Engineer Agent 起動 - 監視: $watch_dir"
 
