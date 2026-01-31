@@ -172,7 +172,7 @@ execute_llm() {
                 --arg ts "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
                 --arg role "${CURRENT_ROLE:-unknown}" \
                 --arg task "$task_file" \
-                '{timestamp: $ts, role: $role, task: $task, model_usage: .modelUsage, input_tokens: .usage.input_tokens, output_tokens: .usage.output_tokens, cache_creation_input_tokens: .usage.cache_creation_input_tokens, cache_read_input_tokens: .usage.cache_read_input_tokens, cost_usd: .total_cost_usd, duration_ms: .duration_ms, session_id: .session_id}' \
+                '{timestamp: $ts, role: $role, task: $task, model: ([.modelUsage | keys[]] | join(",")), models: [.modelUsage | keys[]], model_usage: .modelUsage, input_tokens: .usage.input_tokens, output_tokens: .usage.output_tokens, cache_creation_input_tokens: .usage.cache_creation_input_tokens, cache_read_input_tokens: .usage.cache_read_input_tokens, cost_usd: .total_cost_usd, duration_ms: .duration_ms, session_id: .session_id}' \
                 >> "$usage_log" 2>/dev/null
 
             # トークン使用量をログ表示
@@ -777,10 +777,29 @@ $content"
             final_task_prompt=$(build_task_prompt "$content" "$task_prompt")
 
             log_info "$LLM_TYPE APIで処理中..."
+
+            # ウォッチドッグ: 長時間タスクの経過を定期表示（5分ごと）
+            local watchdog_pid=""
+            local _wd_file
+            _wd_file="$(basename "$file")"
+            (
+                wd_start=$(date +%s)
+                while true; do
+                    sleep 300  # 5分ごと
+                    wd_elapsed=$(( ($(date +%s) - wd_start) / 60 ))
+                    echo -e "\033[2m$(date '+%H:%M:%S')\033[0m \033[0;33m[WARN]\033[0m タスク処理中: $_wd_file — ${wd_elapsed}分経過"
+                done
+            ) &
+            watchdog_pid=$!
+
             response=$(execute_llm "$system_prompt" "$final_task_prompt" "$(basename "$file")") || {
+                kill "$watchdog_pid" 2>/dev/null; wait "$watchdog_pid" 2>/dev/null
                 log_error "$LLM_TYPE API エラー"
                 continue
             }
+
+            # ウォッチドッグ停止
+            kill "$watchdog_pid" 2>/dev/null; wait "$watchdog_pid" 2>/dev/null
 
             echo "$response" > "$output_file"
             mark_processed "$file"

@@ -25,6 +25,7 @@ Commands:
     read        メッセージを読み取り
     status      メッセージのステータスを更新
     watch       新着メッセージを監視
+    reset       全未処理タスクを処理済みにマーク（クリーンリセット）
     help        このヘルプを表示
 
 Send Options:
@@ -56,6 +57,12 @@ Examples:
 
     # 新着メッセージを監視
     $0 watch --dir tasks/backend
+
+    # 全未処理タスクをリセット（新しい依頼前に実行）
+    $0 reset
+
+    # ドライランで対象件数を確認
+    $0 reset --dry-run
 
 EOF
 }
@@ -369,6 +376,76 @@ watch_messages() {
     done
 }
 
+# 全未処理タスクを処理済みにマーク（リセット）
+reset_all() {
+    local dry_run=false
+
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --dry-run) dry_run=true; shift ;;
+            *) shift ;;
+        esac
+    done
+
+    # PROJECT_DIRを特定（agent-loop.shと同じフルパスを使う必要がある）
+    local project_dir
+    project_dir="$(cd "$(dirname "$0")/.." && pwd)"
+    local processed_dir="$project_dir/shared/.processed"
+    local shared="$project_dir/shared"
+
+    mkdir -p "$processed_dir"
+
+    # 対象ディレクトリ一覧（agent-loop.shが監視する全ディレクトリ）
+    local dirs=(
+        "$shared/requirements"
+        "$shared/instructions/pm"
+        "$shared/tasks/frontend"
+        "$shared/tasks/backend"
+        "$shared/tasks/security"
+        "$shared/tasks/qa"
+        "$shared/reports/pm"
+        "$shared/reports/engineers/frontend"
+        "$shared/reports/engineers/backend"
+        "$shared/reports/engineers/security"
+        "$shared/reports/human"
+        "$shared/reports/intern"
+    )
+
+    local total=0
+    local skipped=0
+
+    for dir in "${dirs[@]}"; do
+        [ -d "$dir" ] || continue
+        for file in "$dir"/*.md; do
+            [ -f "$file" ] || continue
+            local hash=$(echo "$file" | md5sum | cut -d' ' -f1)
+            if [ -f "$processed_dir/$hash" ]; then
+                skipped=$((skipped + 1))
+                continue
+            fi
+            total=$((total + 1))
+            if [ "$dry_run" = true ]; then
+                echo "  $(basename "$file")  ← $(basename "$(dirname "$file")")"
+            else
+                touch "$processed_dir/$hash"
+            fi
+        done
+    done
+
+    if [ "$dry_run" = true ]; then
+        echo ""
+        log_info "リセット対象: ${total}件（既に処理済み: ${skipped}件）"
+        log_info "実行するには: $0 reset"
+    else
+        if [ $total -eq 0 ]; then
+            log_info "リセット対象のファイルはありません（全${skipped}件が処理済み）"
+        else
+            log_success "リセット完了: ${total}件を処理済みにマーク（スキップ: ${skipped}件）"
+            log_info "新しい依頼を送信できます: $0 send ..."
+        fi
+    fi
+}
+
 # メイン処理
 main() {
     local command=${1:-help}
@@ -389,6 +466,9 @@ main() {
             ;;
         watch)
             watch_messages "$@"
+            ;;
+        reset)
+            reset_all "$@"
             ;;
         help|--help|-h)
             usage
