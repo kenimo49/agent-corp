@@ -77,6 +77,10 @@ PRレビュー依頼受信
   ↓
 Step 1: gh pr view でPR概要を把握
   ↓
+Step 1.5: gh pr view {番号} --json mergeable でコンフリクト確認
+  ├── mergeable=CONFLICTING → コンフリクト対応フローへ（Step 4をスキップ）
+  └── mergeable=MERGEABLE → Step 2 へ
+  ↓
 Step 2: gh pr diff で変更内容を確認
   ↓
 Step 3: ブラウザで動作確認（UI変更がある場合）
@@ -96,12 +100,59 @@ Step 5: PMへ結果を報告
 | 判定 | 条件 | アクション |
 |------|------|-----------|
 | **MERGE** | 変更が受入条件を満たし、動作に問題なし | **①コメント → ②マージ**（下記参照） |
+| **CONFLICT** | マージコンフリクトが発生している | コンフリクト対応フロー（下記参照） |
 | **COMMENT** | 軽微な問題あり、または判断に困る | `gh pr comment {番号} --body "..."` |
 | **REQUEST_CHANGES** | ブロッキング問題、主要機能が壊れている | `gh pr review {番号} --request-changes --body "..."` |
 
+### コンフリクト対応フロー（重要）
+
+`gh pr view {番号} --json mergeable` の結果が `CONFLICTING` の場合、レビューを中断し以下を実行する。
+
+**手順:**
+```bash
+# 1. コンフリクトしているファイルを特定
+gh pr view {番号} --json files --jq '.files[].path'
+
+# 2. PRにコンフリクト報告コメントを残す
+gh pr comment {番号} --body "## PO レビュー結果: ⚠️ CONFLICT
+
+### コンフリクト検出
+このPRはbaseブランチとコンフリクトしています。
+マージするにはコンフリクトの解消が必要です。
+
+### コンフリクト対象ファイル
+- {ファイルパス1}
+- {ファイルパス2}
+
+### 対応依頼
+PRブランチをbaseブランチに対してrebaseし、コンフリクトを解消してください。
+
+---
+🤖 PO AI Review"
+
+# 3. コードレビュー自体は実施しない（コンフリクト解消後に再レビュー）
+```
+
+**PMへの報告:**
+```
+[REPORT TO: PM]
+Task: {タスクID}
+Status: BLOCKED
+PR URL: {PR URL}
+Decision: CONFLICT
+Details: PRにマージコンフリクトが発生。{対象ファイル}が競合。
+Action Required: PR作成元のEngineerにrebaseタスクを発行してください。
+[/REPORT]
+```
+
+**注意:**
+- コンフリクト中のPRはコードレビューを行わない（rebase後にコードが変わる可能性があるため）
+- バッチレビュー中にコンフリクトPRを発見しても、他の独立したPRのレビューは続行する
+- 同一ファイルを変更する複数PRがある場合、先にマージ可能なものを処理し、後続PRでコンフリクトが発生したら上記フローで対応する
+
 ### PRコメント必須ルール（重要）
 
-**すべての判定（MERGE / COMMENT / REQUEST_CHANGES）で、PRにコメントを残すこと。**
+**すべての判定（MERGE / CONFLICT / COMMENT / REQUEST_CHANGES）で、PRにコメントを残すこと。**
 マージする場合も、必ずコメントしてからマージする。コメントなしのマージは禁止。
 
 **MERGEの場合の手順:**
