@@ -95,7 +95,29 @@ gh pr comment {番号} --body "## PO レビュー結果: ✅ MERGE
 
 # 2. マージ実行
 gh pr merge {番号} --squash
+
+# 3. worktreeクリーンアップ（該当するworktreeがある場合）
+git worktree remove /path/to/worktree
+git branch -d {マージ済みブランチ名}
 ```
+
+### マージ後のworktreeクリーンアップ（重要）
+
+PRをマージした後、そのPRのブランチに紐づく**git worktreeが存在する場合は必ず削除すること。**
+放置すると不要なworktreeが蓄積し、ディスク消費やブランチ競合の原因になる。
+
+```bash
+# 1. 現在のworktree一覧を確認
+git worktree list
+
+# 2. マージ済みブランチのworktreeがあれば削除
+git worktree remove /path/to/worktree
+
+# 3. リモートで削除済みのブランチをローカルからも削除
+git fetch --prune
+```
+
+**注意:** 自分（PO）のworktreeだけでなく、マージによって不要になった他ロールのworktreeも検出した場合は削除してよい。
 
 **COMMENTの場合:**
 ```bash
