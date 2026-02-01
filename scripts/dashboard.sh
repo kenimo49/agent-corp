@@ -180,9 +180,7 @@ get_status() {
         echo "WATCH|待機|新しいタスクを待っています||$last_ts|"
 
     elif echo "$last_line" | grep -q '人間への報告完了'; then
-        local filename
-        filename=$(echo "$last_line" | grep -oP '報告完了 - \K.*')
-        echo "DONE|報告済|$(humanize_filename "$filename")||$last_ts|"
+        echo "WATCH|待機|新しいタスクを待っています||$last_ts|"
 
     elif echo "$last_line" | grep -qP '^\S+@\S+[:~]|^\$\s*$'; then
         # シェルプロンプトが最終行 → プロセスが停止している
@@ -310,6 +308,200 @@ for agent_info in "${agents[@]}"; do
     printf "%8s " "$local_start"
     printf "%b\n" "${local_elapsed:-${DIM}-${RESET}}"
 done
+
+# --- 依頼サマリー（requirement 単位の見積もり集計） ---
+
+# instruction ID → req_id マッピングを構築
+declare -A INST_REF_MAP
+for inf in "$SHARED"/instructions/pm/*.md; do
+    [ -f "$inf" ] || continue
+    _inst_fname=$(basename "$inf" .md)
+    _ref_req=$(grep -m1 '^ref_requirement:' "$inf" 2>/dev/null | sed 's/^ref_requirement: *//')
+    [ -n "$_ref_req" ] && INST_REF_MAP["$_inst_fname"]="$_ref_req"
+done
+
+# instruction ID から req_id を解決（直接マッチ or 同一プレフィクスの別 instruction 経由）
+resolve_inst_to_req() {
+    local inst_id="$1"
+    # 直接マッチ
+    [ -n "${INST_REF_MAP[$inst_id]}" ] && { echo "${INST_REF_MAP[$inst_id]}"; return; }
+    # 同日のプレフィクス（例: 20260131-005）で他の instruction を探す
+    local prefix="${inst_id%%-inst*}"
+    for key in "${!INST_REF_MAP[@]}"; do
+        [[ "$key" == "${prefix}-"* ]] && { echo "${INST_REF_MAP[$key]}"; return; }
+    done
+    echo ""
+}
+
+# task → ref_instruction → req_id を解決し、estimate を集計
+declare -A REQ_EST_TOTAL      # req_id → total estimated minutes
+declare -A REQ_EST_COUNT      # req_id → number of tasks with estimates
+declare -A REQ_TASK_COUNT     # req_id → total task count
+declare -A REQ_ACTUAL_TOTAL   # req_id → total actual minutes
+declare -A REQ_ACTUAL_COUNT   # req_id → number of tasks with actuals
+declare -A REQ_CREATED_AT     # req_id → created_at timestamp
+
+# requirement の created_at を収集
+for rf in "$SHARED"/requirements/*.md; do
+    [ -f "$rf" ] || continue
+    _rid=$(grep -m1 '^id:' "$rf" | sed 's/^id: *//')
+    _created=$(grep -m1 '^created_at:' "$rf" | sed 's/^created_at: *//')
+    [ -n "$_rid" ] && [ -n "$_created" ] && REQ_CREATED_AT["$_rid"]="$_created"
+done
+
+# タスクファイルを走査して estimate/actual を集計
+for role_dir in "$SHARED"/tasks/*/; do
+    [ -d "$role_dir" ] || continue
+    _role=$(basename "$role_dir")
+    for tf in "$role_dir"*.md; do
+        [ -f "$tf" ] || continue
+        _tf_base=$(basename "$tf" .md)
+
+        # ref_instruction → req_id の解決（複数手段で試行）
+        _req_id=""
+
+        # 1) タスクファイル内の ref_instruction フィールド
+        _ref_inst=$(grep -m1 '^ref_instruction:' "$tf" 2>/dev/null | sed 's/^ref_instruction: *//')
+        if [ -n "$_ref_inst" ]; then
+            _req_id=$(resolve_inst_to_req "$_ref_inst")
+        fi
+
+        # 2) タスクファイル内の ref_requirement フィールド
+        if [ -z "$_req_id" ]; then
+            _req_id=$(grep -m1 '^ref_requirement:' "$tf" 2>/dev/null | sed 's/^ref_requirement: *//')
+        fi
+
+        # 3) ファイル名から instruction ID を推定（例: 20260131-005-inst-task → 20260131-005-inst）
+        if [ -z "$_req_id" ]; then
+            _inferred_inst=$(echo "$_tf_base" | sed -n 's/-task$//p')
+            if [ -n "$_inferred_inst" ] && [ -f "$SHARED/instructions/pm/${_inferred_inst}.md" ]; then
+                _req_id=$(resolve_inst_to_req "$_inferred_inst")
+            fi
+        fi
+
+        # 4) instruction ファイルを走査し、タスクファイル名の先頭部分で部分一致
+        #    例: T-20260201-ENNEAGRAM-001-backend → 20260201-ENNEAGRAM-001-inst にマッチ
+        if [ -z "$_req_id" ]; then
+            for _inst_file in "$SHARED"/instructions/pm/*.md; do
+                [ -f "$_inst_file" ] || continue
+                _inst_base=$(basename "$_inst_file" .md)
+                # instruction のコアID部分を抽出（例: 20260201-ENNEAGRAM-001）
+                _inst_core=$(echo "$_inst_base" | sed 's/-inst$//' | sed 's/-req-instruction$//')
+                [ -z "$_inst_core" ] && continue
+                # タスクファイル名にコアIDが含まれるか
+                if [[ "$_tf_base" == *"$_inst_core"* ]]; then
+                    _inst_id=$(grep -m1 '^id:' "$_inst_file" 2>/dev/null | sed 's/^id: *//')
+                    if [ -n "$_inst_id" ]; then
+                        _req_id=$(resolve_inst_to_req "$_inst_base")
+                        [ -n "$_req_id" ] && break
+                    fi
+                fi
+            done
+        fi
+
+        [ -z "$_req_id" ] && continue
+
+        # タスク数カウント
+        REQ_TASK_COUNT["$_req_id"]=$(( ${REQ_TASK_COUNT[$_req_id]:-0} + 1 ))
+
+        # estimate 集計
+        _est_file="$SHARED/.estimates/$_role/${_tf_base}-estimate.json"
+        if [ -f "$_est_file" ]; then
+            _est_min=$(jq -r '.estimated_duration_minutes // empty' "$_est_file" 2>/dev/null)
+            if [ -n "$_est_min" ]; then
+                REQ_EST_TOTAL["$_req_id"]=$(( ${REQ_EST_TOTAL[$_req_id]:-0} + _est_min ))
+                REQ_EST_COUNT["$_req_id"]=$(( ${REQ_EST_COUNT[$_req_id]:-0} + 1 ))
+            fi
+        fi
+
+        # actual 集計
+        _act_file="$SHARED/.estimates/$_role/${_tf_base}-actual.json"
+        if [ -f "$_act_file" ]; then
+            _act_min=$(jq -r '.actual_minutes // empty' "$_act_file" 2>/dev/null)
+            if [ -n "$_act_min" ]; then
+                REQ_ACTUAL_TOTAL["$_req_id"]=$(( ${REQ_ACTUAL_TOTAL[$_req_id]:-0} + ${_act_min%.*} ))
+                REQ_ACTUAL_COUNT["$_req_id"]=$(( ${REQ_ACTUAL_COUNT[$_req_id]:-0} + 1 ))
+            fi
+        fi
+    done
+done
+
+# 依頼サマリー表示
+if [ ${#REQ_CREATED_AT[@]} -gt 0 ]; then
+    echo ""
+    echo -e "${DIM}  ─────────────────────────────────────────────────────────────────────────${RESET}"
+    echo -e "  ${BOLD}依頼サマリー${RESET}"
+    echo ""
+    printf "  ${DIM}%-38s %6s %8s %8s %10s${RESET}\n" "依頼" "Tasks" "見積" "実績" "経過"
+    echo -e "  ${DIM}──────────────────────────────────────────────────────────────────────────${RESET}"
+
+    for rf in "$SHARED"/requirements/*.md; do
+        [ -f "$rf" ] || continue
+        _rid=$(grep -m1 '^id:' "$rf" | sed 's/^id: *//')
+        [ -z "$_rid" ] && continue
+        _rtitle=$(grep -m1 '^# ' "$rf" | sed 's/^# *//')
+        _rtitle=$(truncate "$_rtitle" 36)
+        _created="${REQ_CREATED_AT[$_rid]}"
+
+        _task_cnt="${REQ_TASK_COUNT[$_rid]:-0}"
+        _est_total="${REQ_EST_TOTAL[$_rid]:-0}"
+        _est_cnt="${REQ_EST_COUNT[$_rid]:-0}"
+        _act_total="${REQ_ACTUAL_TOTAL[$_rid]:-0}"
+        _act_cnt="${REQ_ACTUAL_COUNT[$_rid]:-0}"
+
+        # 見積もり表示
+        if [ "$_est_cnt" -gt 0 ]; then
+            if [ "$_est_total" -ge 60 ]; then
+                _est_disp="$(( _est_total / 60 ))h$(( _est_total % 60 ))m"
+            else
+                _est_disp="${_est_total}m"
+            fi
+        else
+            _est_disp="${DIM}-${RESET}"
+        fi
+
+        # 実績表示
+        if [ "$_act_cnt" -gt 0 ]; then
+            if [ "$_act_total" -ge 60 ]; then
+                _act_disp="$(( _act_total / 60 ))h$(( _act_total % 60 ))m"
+            else
+                _act_disp="${_act_total}m"
+            fi
+        else
+            _act_disp="${DIM}-${RESET}"
+        fi
+
+        # 経過時間計算（created_at からの経過）
+        _elapsed_disp="${DIM}-${RESET}"
+        if [ -n "$_created" ]; then
+            _cr_s=$(date -d "$_created" +%s 2>/dev/null)
+            if [ -n "$_cr_s" ]; then
+                _now_s=$(date +%s)
+                _diff=$(( _now_s - _cr_s ))
+                if [ "$_diff" -ge 86400 ]; then
+                    _elapsed_disp="$(( _diff / 86400 ))d$(( _diff % 86400 / 3600 ))h"
+                elif [ "$_diff" -ge 3600 ]; then
+                    _elapsed_disp="$(( _diff / 3600 ))h$(( _diff % 3600 / 60 ))m"
+                elif [ "$_diff" -ge 60 ]; then
+                    _elapsed_disp="$(( _diff / 60 ))m$(( _diff % 60 ))s"
+                else
+                    _elapsed_disp="${_diff}s"
+                fi
+            fi
+        fi
+
+        # タスク進捗色
+        if [ "$_task_cnt" -eq 0 ]; then
+            _cnt_disp="${DIM}0${RESET}"
+        elif [ "$_act_cnt" -ge "$_task_cnt" ]; then
+            _cnt_disp="${GREEN}${_act_cnt}/${_task_cnt}${RESET}"
+        else
+            _cnt_disp="${YELLOW}${_act_cnt}/${_task_cnt}${RESET}"
+        fi
+
+        printf "  %-38s %b %b %b %10s\n" "$_rtitle" "$_cnt_disp" "$_est_disp" "$_act_disp" "$_elapsed_disp"
+    done
+fi
 
 echo ""
 echo -e "${DIM}  ─────────────────────────────────────────────────────────────────────────${RESET}"

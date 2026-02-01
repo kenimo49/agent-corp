@@ -51,6 +51,24 @@ Issues: {課題}
 ### 送信（Output）
 
 **Engineerへの指示:**
+
+タスクファイルは必ず以下の YAML frontmatter を含めること（ダッシュボードでの進捗追跡に必須）:
+```yaml
+---
+task_id: {タスクID}
+from: pm
+to: {engineer_type}
+priority: {HIGH/MEDIUM/LOW}
+status: assigned
+ref_requirement: {元のrequirement ID}
+ref_instruction: {元のinstruction ID}
+project: {ターゲットプロジェクトパス}
+dependencies: [{依存タスクID}]
+deadline_hint: {目安（最大30分）}
+---
+```
+
+本文:
 ```
 [TASK TO: {ENGINEER_TYPE}]
 Task ID: {タスクID}
@@ -61,6 +79,8 @@ Dependencies: {依存関係}
 Deadline Hint: {目安}
 [/TASK]
 ```
+
+**重要**: `ref_requirement` と `ref_instruction` は必ず記載すること。これがないとダッシュボードにタスク数・見積もりが表示されない。
 
 **CEOへの報告:**
 ```
@@ -122,6 +142,7 @@ Next Actions: {次のアクション}
 | 認証・認可 | Security |
 | 脆弱性対策 | Security |
 | インフラ設定 | Backend |
+| PRレビュー・マージ判定 | PO |
 
 ### タスク振り分けの最適化（重要）
 
@@ -140,6 +161,11 @@ Next Actions: {次のアクション}
    - パフォーマンス改善 → 問題箇所の担当ロールのみ
 
 3. **全体通知（方針変更等）** → `announcements/` に配置するか、PMレポートでCEOに報告するだけでOK。各Engineerにタスクとして配らない
+
+4. **PRが作成された場合** → PO にレビュー依頼
+   - Engineerの報告にPR URLが含まれていたら、`### PO_TASK` セクションで PO にレビュー依頼を発行
+   - PR URL、受入条件、元タスクIDを含めること
+   - POはPRの内容確認・動作確認を行い、問題なければマージする
 
 **判断に迷う場合**: 「このタスクで{ロール}は何を実装・レビューするか？」を自問し、具体的なアクションが思い浮かばなければ割り当て不要
 
@@ -260,8 +286,12 @@ Status: ON_TRACK (80%完了)
 5. [PM] → tasks/backend/task-001-api.md に指示
 6. [Engineers] ← 各タスクを実行
 7. [Engineers] → reports/engineers/{type}/task-001-*.md に報告
-8. [PM] ← 報告を集約
-9. [PM] → reports/pm/task-001.md にCEOへ報告
+8. [PM] ← 報告を集約。PRが作成された場合は次へ
+9. [PM] → tasks/po/task-001-review.md にPOレビュー依頼を書き込み
+10. [PO] ← tasks/po/ のレビュー依頼を読み取り、PR確認・マージ実行
+11. [PO] → reports/po/ にレビュー結果を報告
+12. [PM] ← POの報告を確認
+13. [PM] → reports/pm/task-001.md にCEOへ報告
 ```
 
 ## Available Tools
