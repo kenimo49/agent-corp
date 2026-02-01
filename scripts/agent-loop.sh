@@ -944,6 +944,161 @@ $content"
     done
 }
 
+# PO（Product Owner）エージェント — バッチレビューモード
+# 未処理のレビュー依頼をまとめて1回のLLM呼び出しで処理する
+run_po() {
+    local role="po"
+    local watch_dir="$PROJECT_DIR/shared/tasks/$role"
+    local output_dir="$PROJECT_DIR/shared/reports/po"
+    local prompt_file="$PROJECT_DIR/prompts/po.md"
+    local role_workdir
+    role_workdir=$(get_role_workdir "$role")
+    local max_batch=${PO_BATCH_SIZE:-5}  # 1回のLLM呼び出しで処理する最大PR数
+
+    validate_environment "$role" "$prompt_file"
+    mkdir -p "$watch_dir" "$output_dir"
+
+    export ENABLE_CHROME=1
+    log_info "PO Agent 起動（バッチモード, max=$max_batch） - 監視: $watch_dir, 作業: $role_workdir (Chrome連携: 有効)"
+
+    while true; do
+        # 未処理タスクを収集
+        local pending_files=()
+        for file in "$watch_dir"/*.md; do
+            [ -f "$file" ] || continue
+            is_processed "$file" && continue
+            check_task_file_exists "$file" || continue
+            pending_files+=("$file")
+        done
+
+        local pending_count=${#pending_files[@]}
+
+        if [ "$pending_count" -gt 0 ]; then
+            # バッチサイズ分だけ取得
+            local batch_count=$(( pending_count > max_batch ? max_batch : pending_count ))
+            log_info "未処理レビュー: ${pending_count}件 → ${batch_count}件をバッチ処理"
+
+            local task_start_time=$(date +%s)
+
+            # バッチプロンプトを組み立て
+            local batch_prompt="## POバッチレビュー依頼
+
+以下の **${batch_count}件** のレビュー依頼をまとめて処理してください。
+各PRについて、レビュー → 判定 → アクション（マージ/コメント）を実施し、
+**PR単位で** レポートファイルを作成してください。
+
+## 作業ディレクトリ
+$role_workdir
+
+## 効率的なレビュー方針
+- **Backend/Security PR（UI変更なし）**: \`gh pr diff\` + baseブランチのコード確認のみ。ブラウザ確認不要
+- **Frontend PR（UI変更あり）**: \`gh pr diff\` + 必要に応じてブラウザで動作確認
+- **ドキュメント/設定のみ**: diff確認のみ
+
+## 依存関係に注意
+同一機能の連続PR（例: DBモデル → API → UI）がある場合、ベースとなるPRを先にレビュー・マージしてから次に進むこと。
+
+## レポート出力
+各PRのレビュー完了後、以下のパスにレポートを作成:
+\`$output_dir/{タスクファイル名}-report.md\`
+
+---
+"
+            local i=0
+            local batch_files=()
+            for file in "${pending_files[@]}"; do
+                [ "$i" -ge "$batch_count" ] && break
+                local content=$(cat "$file")
+                batch_prompt="${batch_prompt}
+### レビュー依頼 $((i+1))/${batch_count}
+**ファイル:** $(basename "$file")
+**レポート出力先:** $output_dir/$(basename "$file" .md)-report.md
+---
+$content
+
+---
+"
+                batch_files+=("$file")
+                i=$((i+1))
+            done
+
+            local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a Product Owner.")
+
+            # 事前見積もり（バッチ全体）
+            local estimate_dir="$PROJECT_DIR/shared/.estimates/$role"
+            mkdir -p "$estimate_dir"
+            local batch_id="batch-$(date '+%Y%m%d-%H%M%S')"
+            local estimate_instruction="## 事前見積もり（必須・最初に実行）
+${batch_count}件のレビューバッチを開始する前に以下のJSONファイルを作成してください。
+ファイルパス: $estimate_dir/${batch_id}-estimate.json
+
+\`\`\`json
+{
+  \"task_file\": \"${batch_id}\",
+  \"role\": \"po\",
+  \"estimated_at\": \"$(date -u '+%Y-%m-%dT%H:%M:%SZ')\",
+  \"estimated_duration_minutes\": <見積もり時間（分）>,
+  \"estimated_complexity\": \"<low/medium/high>\",
+  \"description\": \"POバッチレビュー ${batch_count}件\",
+  \"subtasks\": [\"PR1レビュー\", \"PR2レビュー\"]
+}
+\`\`\`
+
+見積もりファイル作成後、以下のレビューを実行してください。
+
+---
+
+"
+            local full_prompt="${estimate_instruction}${batch_prompt}"
+            local final_task_prompt
+            final_task_prompt=$(build_task_prompt "" "$full_prompt")
+
+            log_info "$LLM_TYPE APIで${batch_count}件のレビューをバッチ処理中..."
+
+            # ウォッチドッグ
+            local watchdog_pid=""
+            (
+                wd_start=$(date +%s)
+                while true; do
+                    sleep 300
+                    wd_elapsed=$(( ($(date +%s) - wd_start) / 60 ))
+                    echo -e "\033[2m$(date '+%H:%M:%S')\033[0m \033[0;33m[WARN]\033[0m POバッチレビュー処理中: ${batch_count}件 — ${wd_elapsed}分経過"
+                done
+            ) &
+            watchdog_pid=$!
+
+            response=$(execute_llm "$system_prompt" "$final_task_prompt" "$batch_id" "$role_workdir") || {
+                kill "$watchdog_pid" 2>/dev/null; wait "$watchdog_pid" 2>/dev/null
+                log_error "$LLM_TYPE API エラー（POバッチ）"
+                sleep "$POLL_INTERVAL"
+                continue
+            }
+
+            kill "$watchdog_pid" 2>/dev/null; wait "$watchdog_pid" 2>/dev/null
+
+            # バッチ処理完了: 全タスクを処理済みにマーク
+            for file in "${batch_files[@]}"; do
+                mark_processed "$file"
+                log_success "レビュー完了（バッチ）: $(basename "$file")"
+            done
+
+            # バッチ全体のサマリーを保存（LLMが個別レポートを作成していない場合のフォールバック）
+            local summary_file="$output_dir/${batch_id}-summary-report.md"
+            if [ ! -f "$summary_file" ]; then
+                echo "$response" > "$summary_file"
+                log_success "バッチサマリー: $summary_file"
+            fi
+
+            record_task_actual "$batch_id" "$role" "$task_start_time"
+        fi
+
+        # セッションコスト閾値チェック
+        check_session_cost || wait_for_session_reset
+
+        sleep "$POLL_INTERVAL"
+    done
+}
+
 # Performance Analyst エージェント（タイマー駆動）
 run_performance_analyst() {
     local output_dir="$PROJECT_DIR/shared/reports/engineers/performance_analyst"
@@ -1119,8 +1274,11 @@ main() {
         intern)
             run_intern
             ;;
-        frontend|backend|security|qa|po)
+        frontend|backend|security|qa)
             run_engineer "$role"
+            ;;
+        po)
+            run_po
             ;;
         performance_analyst)
             run_performance_analyst
