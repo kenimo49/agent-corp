@@ -564,12 +564,21 @@ $content"
                 fi
             done
 
-            # タスクファイルが作成されたか確認
+            # タスクファイルが作成されたか確認 + 空タスクフィルタリング
             local tasks_created=false
             for role in frontend backend security qa po; do
-                if [ -f "$output_dir/${role}/${basename}-task.md" ]; then
-                    log_success "タスク作成: tasks/${role}/${basename}-task.md"
-                    tasks_created=true
+                local task_file="$output_dir/${role}/${basename}-task.md"
+                if [ -f "$task_file" ]; then
+                    # 空タスクフィルタ: 実質的な内容がないファイルを削除（LLM呼び出しの無駄を防止）
+                    local meaningful_lines
+                    meaningful_lines=$(grep -cvE '^\s*$|^---$|^#|^該当なし|^[Nn]/?[Aa]|^なし' "$task_file" 2>/dev/null || echo "0")
+                    if [ "$meaningful_lines" -lt 2 ]; then
+                        log_warn "空タスクを除外: tasks/${role}/${basename}-task.md (有効行: ${meaningful_lines})"
+                        rm -f "$task_file"
+                    else
+                        log_success "タスク作成: tasks/${role}/${basename}-task.md"
+                        tasks_created=true
+                    fi
                 fi
             done
 
