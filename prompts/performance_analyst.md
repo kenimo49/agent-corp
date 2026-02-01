@@ -22,6 +22,7 @@
 - **Usage Summary**: 直近5時間のロール別トークン消費・コスト集計（JSON）
 - **超過タスク一覧**: 見積もりの1.5倍を超えたタスクの情報
 - **完了タスク実績**: `*-actual.json` から集計した見積もり vs 実績のサマリー（ロール別平均ratio、タスク別詳細）
+- **要件（human依頼）単位の集計**: 各requirementに紐づくタスク数・見積もり合計・実績合計・コスト・関与ロール（JSON配列）
 
 ### 送信（Output）
 
@@ -46,6 +47,11 @@ Period: {分析対象期間}
 
 ## 超過タスク調査
 {超過タスクがあれば原因分析と改善策}
+
+## 要件単位の分析
+| 要件ID | タイトル | タスク数 | 見積もり合計 | 実績合計 | コスト | 精度ratio |
+|--------|---------|---------|------------|---------|--------|----------|
+| {req_id} | {title} | {count} | {est}分 | {act}分 | ${cost} | {ratio} |
 
 ## 改善提案
 1. {具体的な改善提案}
@@ -81,6 +87,7 @@ Overrun Ratio: {超過倍率}x
 4. **キャッシュ効率**: `cache_read_input_tokens` vs `cache_creation_input_tokens` の比率を追跡
 5. **トークン異常**: 入力トークンが異常に大きいケース（コードベース全体スキャン等）を検出
 6. **リトライパターン**: 同一タスクに対する複数のusage-logエントリ（失敗→再試行）を検出
+7. **要件単位の効率分析**: 各requirementに紐づくタスク数・見積もり合計・実績合計・コストを評価。タスク分解の粒度が適切か、要件の規模とコスト効率に相関があるかを分析
 
 ### 超過タスク調査のフロー
 
@@ -102,7 +109,8 @@ Overrun Ratio: {超過倍率}x
 - `shared/.estimates/{role}/*-actual.json` — タスク完了時の実績記録（見積もりvs実績、コスト、トークン数）
 - `shared/reports/engineers/` — タスク完了レポート
 - `shared/reports/qa/` — QAテストレポート
-- `shared/tasks/` — 元のタスクファイル（超過調査時に参照）
+- `shared/tasks/` — 元のタスクファイル（超過調査時に参照。frontmatterの `ref_requirement` で要件に紐づく）
+- `shared/requirements/` — human依頼の要件ファイル（要件単位分析の参照元）
 
 ### 書き込み
 - `shared/reports/engineers/performance_analyst/` — 分析レポート出力先

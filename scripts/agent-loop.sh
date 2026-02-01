@@ -1209,7 +1209,71 @@ run_performance_analyst() {
             ' 2>/dev/null)
         fi
 
-        # 5. LLMに分析を依頼
+        # 5. 要件（human依頼）単位の集計
+        local req_summary=""
+        local req_dir="$PROJECT_DIR/shared/requirements"
+        local tasks_dir="$PROJECT_DIR/shared/tasks"
+        if [ -d "$req_dir" ]; then
+            req_summary=$(
+                echo "["
+                local first=true
+                for req_file in "$req_dir"/*.md; do
+                    [ -f "$req_file" ] || continue
+                    local req_basename=$(basename "$req_file" .md)
+                    local req_title=$(grep -m1 '^# ' "$req_file" 2>/dev/null | sed 's/^# //')
+                    local req_created=$(grep -m1 '^created_at:' "$req_file" 2>/dev/null | sed 's/^created_at: *//')
+                    local req_priority=$(grep -m1 '^priority:' "$req_file" 2>/dev/null | sed 's/^priority: *//')
+
+                    # このrequirementに紐づくタスク数・見積もり・実績を集計
+                    local task_count=0
+                    local total_est=0
+                    local total_actual=0
+                    local total_cost=0
+                    local roles_involved=""
+
+                    for role_dir in "$tasks_dir"/frontend "$tasks_dir"/backend "$tasks_dir"/security "$tasks_dir"/qa "$tasks_dir"/po; do
+                        [ -d "$role_dir" ] || continue
+                        local role_name=$(basename "$role_dir")
+                        for task_file in "$role_dir"/*.md; do
+                            [ -f "$task_file" ] || continue
+                            # ref_requirementでマッチ（パスまたはbasename部分一致）
+                            local ref_req=$(grep -m1 '^ref_requirement:' "$task_file" 2>/dev/null | sed 's/^ref_requirement: *//')
+                            if [ -n "$ref_req" ] && [[ "$ref_req" == *"$req_basename"* ]]; then
+                                task_count=$((task_count + 1))
+                                roles_involved="${roles_involved}${role_name},"
+
+                                # 見積もりファイルを探す
+                                local task_basename=$(basename "$task_file" .md)
+                                local est_file="$estimate_dir/$role_name/${task_basename}-estimate.json"
+                                if [ -f "$est_file" ]; then
+                                    local est=$(jq -r '.estimated_duration_minutes // 0' "$est_file" 2>/dev/null)
+                                    total_est=$(awk "BEGIN {printf \"%.1f\", $total_est + $est}")
+                                fi
+                                # 実績ファイルを探す
+                                local act_file="$estimate_dir/$role_name/${task_basename}-actual.json"
+                                if [ -f "$act_file" ]; then
+                                    local act=$(jq -r '.actual_minutes // 0' "$act_file" 2>/dev/null)
+                                    local cost=$(jq -r '.cost_usd // 0' "$act_file" 2>/dev/null)
+                                    total_actual=$(awk "BEGIN {printf \"%.1f\", $total_actual + $act}")
+                                    total_cost=$(awk "BEGIN {printf \"%.4f\", $total_cost + $cost}")
+                                fi
+                            fi
+                        done
+                    done
+
+                    # ユニークなロール一覧
+                    roles_involved=$(echo "$roles_involved" | tr ',' '\n' | sort -u | tr '\n' ',' | sed 's/,$//')
+
+                    if [ "$first" = true ]; then first=false; else echo ","; fi
+                    cat << REQ_EOF
+  {"requirement": "$req_basename", "title": "$req_title", "priority": "$req_priority", "created_at": "$req_created", "task_count": $task_count, "roles": "$roles_involved", "total_estimated_min": $total_est, "total_actual_min": $total_actual, "total_cost_usd": $total_cost}
+REQ_EOF
+                done
+                echo "]"
+            )
+        fi
+
+        # 6. LLMに分析を依頼
         local system_prompt
         system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a performance analyst.")
 
@@ -1228,6 +1292,12 @@ ${overrun_info:-なし}
 ${actuals_summary:-{\"total\": 0}}
 \`\`\`
 
+## 要件（human依頼）単位の集計
+各requirementに紐づくタスク数・見積もり合計・実績合計・コスト:
+\`\`\`json
+${req_summary:-[]}
+\`\`\`
+
 ## 分析指示
 1. ロール別コスト効率を評価してください
 2. 超過タスクがあれば原因を推測し、改善策を提案してください
@@ -1235,7 +1305,12 @@ ${actuals_summary:-{\"total\": 0}}
 4. ロール別に見積もり傾向（過大/過小/適正）を分析し、改善提案してください
 5. モデル選択の妥当性を検証してください（model_usage フィールドを参照）
 6. キャッシュ効率（cache_read vs cache_creation の比率）を評価してください
-7. 全体的な改善提案をまとめてください
+7. **要件（human依頼）単位の分析**を行ってください:
+   - 各要件のタスク分解数は適切か（多すぎ/少なすぎの判断）
+   - 要件の規模（タスク数）とコスト効率の相関
+   - 要件ごとの見積もり vs 実績の精度
+   - 大規模要件（タスク数が多い）の効率性と小規模要件との比較
+8. 全体的な改善提案をまとめてください
 
 レポートは [REPORT TO: PM] フォーマットで出力してください。"
 
