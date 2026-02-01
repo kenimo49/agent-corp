@@ -26,6 +26,7 @@ Commands:
     status      メッセージのステータスを更新
     watch       新着メッセージを監視
     reset       全未処理タスクを処理済みにマーク（クリーンリセット）
+    analyze     Performance Analystを1回実行（コスト・見積もり精度分析）
     help        このヘルプを表示
 
 Send Options:
@@ -63,6 +64,9 @@ Examples:
 
     # ドライランで対象件数を確認
     $0 reset --dry-run
+
+    # コスト・見積もり精度を分析
+    $0 analyze
 
 EOF
 }
@@ -450,6 +454,15 @@ reset_all() {
     fi
 }
 
+# Performance Analyst をオンデマンド実行
+run_analyze() {
+    local project_dir
+    project_dir="$(cd "$(dirname "$0")/.." && pwd)"
+
+    log_info "Performance Analyst を実行中..."
+    "$project_dir/scripts/agent-loop.sh" performance_analyst
+}
+
 # メイン処理
 main() {
     local command=${1:-help}
@@ -473,6 +486,9 @@ main() {
             ;;
         reset)
             reset_all "$@"
+            ;;
+        analyze)
+            run_analyze "$@"
             ;;
         help|--help|-h)
             usage

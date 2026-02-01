@@ -146,6 +146,7 @@ execute_llm() {
     local system_prompt="$1"
     local task_prompt="$2"
     local task_file="${3:-}"
+    local work_dir="${4:-$TARGET_PROJECT}"
 
     case $LLM_TYPE in
         claude)
@@ -158,7 +159,7 @@ execute_llm() {
             raw_output=$(claude -p "$task_prompt" \
                 --system-prompt "$system_prompt" \
                 --allowedTools "Bash,Edit,Read,Write" \
-                --add-dir "$TARGET_PROJECT" \
+                --add-dir "$work_dir" \
                 ${ENABLE_CHROME:+--chrome} \
                 ${model:+--model "$model"} \
                 --output-format json \
@@ -304,6 +305,17 @@ mark_processed() {
     touch "$PROCESSED_DIR/$hash"
 }
 
+# タスクファイル存在確認（共通関数）
+# 戻り値: 0=存在する, 1=存在しない（LLM呼び出しスキップ）
+check_task_file_exists() {
+    local file="$1"
+    if [ ! -f "$file" ]; then
+        log_info "タスクファイル不在: $(basename "$file")"
+        return 1
+    fi
+    return 0
+}
+
 # CEOエージェント
 run_ceo() {
     local watch_dir="$PROJECT_DIR/shared/requirements"
@@ -324,6 +336,7 @@ run_ceo() {
         for file in "$watch_dir"/*.md; do
             [ -f "$file" ] || continue
             is_processed "$file" && continue
+            check_task_file_exists "$file" || continue
 
             log_info "新しい要件を検出: $(basename "$file")"
 
@@ -357,6 +370,7 @@ $content"
         for file in "$report_dir"/*.md; do
             [ -f "$file" ] || continue
             is_processed "$file" && continue
+            check_task_file_exists "$file" || continue
 
             log_info "PMから報告を受信: $(basename "$file")"
 
@@ -390,6 +404,7 @@ $content"
         for file in "$intern_report_dir"/*.md; do
             [ -f "$file" ] || continue
             is_processed "$file" && continue
+            check_task_file_exists "$file" || continue
 
             log_info "インターンから報告を受信: $(basename "$file")"
 
@@ -445,6 +460,7 @@ run_pm() {
         for file in "$watch_dir"/*.md; do
             [ -f "$file" ] || continue
             is_processed "$file" && continue
+            check_task_file_exists "$file" || continue
 
             log_info "新しい指示を検出: $(basename "$file")"
 
@@ -452,10 +468,54 @@ run_pm() {
             local basename=$(basename "$file" .md)
 
             local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a PM.")
-            local task_prompt="以下のCEOからの指示を分析し、エンジニアへのタスクに分解してください。
+
+            # プロジェクトスケールに応じたセキュリティセクション
+            local security_section=""
+            case "${SECURITY_POLICY:-on_demand}" in
+                always)
+                    security_section="### SECURITY_TASK
+（セキュリティエンジニアへのタスク内容）"
+                    ;;
+                on_demand)
+                    security_section="### SECURITY_TASK
+（認証・認可・権限・外部入力処理・暗号化に関わる変更がある場合のみ記載。それ以外は「該当なし」）"
+                    ;;
+                off)
+                    security_section=""
+                    ;;
+            esac
+
+            # スケール別の振り分けガイダンス
+            local scale_guidance=""
+            case "${PROJECT_SCALE:-small}" in
+                small)
+                    scale_guidance="## プロジェクト規模: ${PROJECT_SCALE} (${PROJECT_TYPE:-personal})
+**タスク振り分けの厳格ルール:**
+- 1つのタスクは原則 **1ロールのみ** に振ること。同じタスクを複数ロールに配布しない
+- 運用タスク（見積もり改訂、パフォーマンス最適化等）はPM自身で判断し、Engineerに振らない
+- デプロイは **Backendのみ** に振る（Frontend/Security/QAへの同時配布は禁止）
+- QAは **機能追加・バグ修正の完了後** にのみ振る。レビューやリファクタリングでは不要
+- セキュリティポリシー: ${SECURITY_POLICY} — on_demandの場合、認証・権限変更時のみSECURITY_TASKを記載
+"
+                    ;;
+                medium)
+                    scale_guidance="## プロジェクト規模: ${PROJECT_SCALE} (${PROJECT_TYPE:-team})
+**タスク振り分けルール:**
+- タスクは関連するロールにのみ振ること。全ロール一斉配布は原則禁止
+- セキュリティポリシー: ${SECURITY_POLICY}
+"
+                    ;;
+                large)
+                    scale_guidance="## プロジェクト規模: ${PROJECT_SCALE} (${PROJECT_TYPE:-enterprise})
+- セキュリティポリシー: ${SECURITY_POLICY}
+"
+                    ;;
+            esac
+
+            local task_prompt="${scale_guidance}以下のCEOからの指示を分析し、エンジニアへのタスクに分解してください。
 
 ## 出力形式
-以下の3セクションに分けて出力してください。該当タスクがない場合は「該当なし」と記載。
+以下のセクションに分けて出力してください。該当タスクがない場合は「該当なし」と記載。
 
 ### FRONTEND_TASK
 （フロントエンドエンジニアへのタスク内容）
@@ -463,8 +523,7 @@ run_pm() {
 ### BACKEND_TASK
 （バックエンドエンジニアへのタスク内容）
 
-### SECURITY_TASK
-（セキュリティエンジニアへのタスク内容）
+${security_section}
 
 ### QA_TASK
 （QAへのテスト依頼。実装完了後の動作確認・リリース判定。該当なしの場合もあり）
@@ -534,6 +593,7 @@ $content"
             for file in "$role_report_dir"/*.md; do
                 [ -f "$file" ] || continue
                 is_processed "$file" && continue
+                check_task_file_exists "$file" || continue
 
                 log_info "エンジニア($role)から報告: $(basename "$file")"
 
@@ -585,6 +645,7 @@ run_intern() {
         for file in "$watch_dir"/*.md; do
             [ -f "$file" ] || continue
             is_processed "$file" && continue
+            check_task_file_exists "$file" || continue
 
             log_info "新しいタスクを検出: $(basename "$file")"
 
@@ -692,6 +753,10 @@ run_engineer() {
     local output_dir="$PROJECT_DIR/shared/reports/engineers/$role"
     local prompt_file="$PROJECT_DIR/prompts/engineers/${role}.md"
 
+    # ロール別の作業ディレクトリを解決（worktree）
+    local role_workdir
+    role_workdir=$(get_role_workdir "$role")
+
     # QAはprompts/qa.md、reports/qa/ を使用
     if [ "$role" = "qa" ]; then
         prompt_file="$PROJECT_DIR/prompts/qa.md"
@@ -707,16 +772,17 @@ run_engineer() {
     # frontend/qa/poロールはClaude in Chrome連携を有効化（UI挙動チェック用）
     if [ "$role" = "frontend" ] || [ "$role" = "qa" ] || [ "$role" = "po" ]; then
         export ENABLE_CHROME=1
-        log_info "$role Engineer Agent 起動 - 監視: $watch_dir (Chrome連携: 有効)"
+        log_info "$role Agent 起動 - 監視: $watch_dir, 作業: $role_workdir (Chrome連携: 有効)"
     else
         unset ENABLE_CHROME
-        log_info "$role Engineer Agent 起動 - 監視: $watch_dir"
+        log_info "$role Agent 起動 - 監視: $watch_dir, 作業: $role_workdir"
     fi
 
     while true; do
         for file in "$watch_dir"/*.md; do
             [ -f "$file" ] || continue
             is_processed "$file" && continue
+            check_task_file_exists "$file" || continue
 
             log_info "新しいタスクを検出: $(basename "$file")"
 
@@ -756,6 +822,17 @@ run_engineer() {
             if [ "$role" = "qa" ]; then
                 task_prompt="${estimate_instruction}以下のテスト依頼を実施し、結果を報告してください。
 
+## 作業ディレクトリ
+$role_workdir
+
+## ブランチ切り替え
+タスク内容にPR URLやブランチ名が含まれている場合は、そのブランチをチェックアウトしてテストすること。
+\`\`\`bash
+cd $role_workdir
+git fetch origin
+git checkout <feature-branch-name>
+\`\`\`
+
 ## テスト手順（必須）
 1. プロジェクト構造を確認し、Playwrightのセットアップ状態を確認する
 2. Playwrightが未導入なら初期セットアップを行う（npm install -D @playwright/test && npx playwright install --with-deps chromium）
@@ -774,19 +851,28 @@ $content"
             elif [ "$role" = "po" ]; then
                 task_prompt="${estimate_instruction}以下のPRレビュー依頼を処理してください。
 
+## 作業ディレクトリ
+$role_workdir
+
 ## レビュー手順（必須）
 1. PR URLからPR番号を抽出
 2. \`gh pr view <番号>\` でPR詳細を取得
 3. \`gh pr diff <番号>\` で変更内容を確認
 4. 受け入れ基準を確認し、変更が要件を満たしているか判断
-5. 必要に応じて、ブラウザで動作確認（Claude in Chromeツール使用）
+5. 必要に応じて、PRのブランチをチェックアウトして動作確認
+   \`\`\`bash
+   cd $role_workdir
+   gh pr checkout <番号>
+   \`\`\`
+6. ブラウザで動作確認（Claude in Chromeツール使用）
    - 開発サーバーが起動していなければ起動する
-   - PRのブランチをチェックアウトして確認
-6. 判断:
+   - スクリーンショットで表示を確認
+   - コンソールエラーがないか確認
+7. 判断:
    - 問題なし → \`gh pr merge <番号> --squash\` でマージ
    - 軽微な問題/判断困難 → \`gh pr comment <番号> --body \"...\"\` でフィードバック
    - ブロッキング問題 → \`gh pr review <番号> --request-changes --body \"...\"\`
-7. PMへ結果を報告
+8. PMへ結果を報告
 
 タスクファイル: $file
 ---
@@ -794,14 +880,23 @@ $content"
             else
                 task_prompt="${estimate_instruction}以下のタスクを実行し、結果を報告してください。
 
+## 作業ディレクトリ
+$role_workdir
+
 ## Git運用ルール（必須）
-1. 作業前に \`develop\` ブランチから feature/ または fix/ ブランチを作成すること
+1. 作業ディレクトリ \`$role_workdir\` で作業すること
+2. 作業前に \`${WORKTREE_BASE_BRANCH}\` ブランチの最新を取り込み、feature/ または fix/ ブランチを作成すること
+   \`\`\`bash
+   cd $role_workdir
+   git fetch origin
+   git checkout -b feature/{タスクID}-{簡潔な説明} origin/${WORKTREE_BASE_BRANCH}
+   \`\`\`
    - 新機能: \`feature/{タスクID}-{簡潔な説明}\`（例: \`feature/T-001-auth-foundation\`）
    - バグ修正: \`fix/{タスクID}-{簡潔な説明}\`（例: \`fix/T-001-jwt-token-error\`）
-2. 作業はfeature/fixブランチで行い、developには直接コミットしないこと
-3. 作業完了後、\`gh pr create\` でdevelopブランチへのPull Requestを作成すること
-4. PRのタイトルにタスクIDを含めること
-5. developブランチが存在しない場合は、mainから作成すること
+3. 作業はfeature/fixブランチで行い、${WORKTREE_BASE_BRANCH}には直接コミットしないこと
+4. 作業完了後、\`gh pr create --base ${WORKTREE_BASE_BRANCH}\` で${WORKTREE_BASE_BRANCH}ブランチへのPull Requestを作成すること
+5. PRのタイトルにタスクIDを含めること
+6. PR作成後、ブランチはそのまま残すこと（${WORKTREE_BASE_BRANCH}にcheckoutしないこと）
 
 タスクファイル: $file
 ---
@@ -827,7 +922,7 @@ $content"
             ) &
             watchdog_pid=$!
 
-            response=$(execute_llm "$system_prompt" "$final_task_prompt" "$(basename "$file")") || {
+            response=$(execute_llm "$system_prompt" "$final_task_prompt" "$(basename "$file")" "$role_workdir") || {
                 kill "$watchdog_pid" 2>/dev/null; wait "$watchdog_pid" 2>/dev/null
                 log_error "$LLM_TYPE API エラー"
                 continue
@@ -861,23 +956,10 @@ run_performance_analyst() {
     validate_environment "performance_analyst" "$prompt_file"
     mkdir -p "$output_dir" "$estimate_dir"
 
-    log_info "Performance Analyst Agent 起動 - チェック間隔: ${check_interval}秒"
+    log_info "Performance Analyst Agent 起動 - オンデマンド実行（1回分析）"
 
-    while true; do
-        # 1. 変更検出: usage-log の行数変化をチェック
-        local current_line_count=0
-        if [ -f "$usage_log" ]; then
-            current_line_count=$(wc -l < "$usage_log")
-        fi
-
-        if [ "$current_line_count" -eq "$last_line_count" ]; then
-            log_info "変更なし - スキップ (log: $current_line_count lines)"
-            sleep "$check_interval"
-            continue
-        fi
-
-        last_line_count=$current_line_count
-        log_info "変更検出 (log: $current_line_count lines) - 分析を開始"
+    # オンデマンドモード: ループせず1回だけ実行
+    {
 
         # 2. 直近5時間のサマリーをjqで事前集計
         local five_hours_ago
@@ -1009,11 +1091,8 @@ ${actuals_summary:-{\"total\": 0}}
         echo "$response" > "$output_dir/analysis-${timestamp}-report.md"
         log_success "分析レポート作成: analysis-${timestamp}-report.md"
 
-        # セッションコスト閾値チェック（超過時は自動待機）
-        check_session_cost || wait_for_session_reset
-
-        sleep "$check_interval"
-    done
+        log_success "分析完了"
+    }
 }
 
 # メイン
