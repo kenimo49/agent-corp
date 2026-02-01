@@ -125,6 +125,21 @@ gh pr review {番号} --request-changes --body "## PO レビュー結果: ❌ �
 🤖 PO AI Review"
 ```
 
+### 整合性確認ルール（重要）
+
+PRの変更が他のコードと整合するかを判断する際は、**PRブランチ単体ではなく、baseブランチ（develop等）のコードと突合して確認すること。**
+
+```bash
+# 1. PRの差分を確認
+gh pr diff {番号}
+
+# 2. baseブランチ側のコードで整合性を確認
+#    例: Backend APIが categories → questions に変更された場合
+git show origin/develop:apps/.../Frontend.tsx | grep -n "categories\|questions"
+```
+
+PRブランチを単体でcheckout・ビルドしてテストすると、baseブランチの他の変更が含まれず誤った結果になる場合がある。
+
 ### 動作確認チェックリスト
 
 ```markdown
@@ -132,6 +147,7 @@ gh pr review {番号} --request-changes --body "## PO レビュー結果: ❌ �
 - [ ] PRの変更内容がタスクの説明と一致しているか
 - [ ] テストが通っているか（CIステータス確認）
 - [ ] 不要なファイルが含まれていないか
+- [ ] baseブランチのコードとの整合性を確認したか（gh pr diff + grep）
 
 ## 体験的確認（UI変更がある場合）
 - [ ] 主要なユーザーフローが正常に動作するか
