@@ -159,7 +159,7 @@ execute_llm() {
             raw_output=$(claude -p "$task_prompt" \
                 --system-prompt "$system_prompt" \
                 --allowedTools "Bash,Edit,Read,Write" \
-                --add-dir "$work_dir" \
+                ${work_dir:+--add-dir "$work_dir"} \
                 ${ENABLE_CHROME:+--chrome} \
                 ${model:+--model "$model"} \
                 --output-format json \
@@ -324,11 +324,14 @@ run_ceo() {
     local output_dir="$PROJECT_DIR/shared/instructions/pm"
     local final_report_dir="$PROJECT_DIR/shared/reports/human"
     local prompt_file="$PROJECT_DIR/prompts/ceo.md"
+    local compact_prompt_file="$PROJECT_DIR/prompts/compact/ceo-routing.md"
+    local ceo_context_dir="${TARGET_PROJECT}/docs"  # CEOはdocsのみ参照（プロジェクト全体は不要）
 
     validate_environment "ceo" "$prompt_file"
     mkdir -p "$watch_dir" "$report_dir" "$intern_report_dir" "$output_dir" "$final_report_dir"
 
     log_info "CEO Agent 起動 - 監視: $watch_dir, $report_dir, $intern_report_dir"
+    log_info "CEO コンテキスト: $ceo_context_dir (プロジェクト全体ではなくdocsのみ)"
     is_rag_enabled && log_info "RAG有効 - ナレッジディレクトリ: $AGENT_KNOWLEDGE_DIR"
 
     while true; do
@@ -356,7 +359,7 @@ $content"
             final_task_prompt=$(build_task_prompt "$content" "$task_prompt")
 
             log_info "$LLM_TYPE APIで処理中..."
-            response=$(execute_llm "$system_prompt" "$final_task_prompt" "$(basename "$file")") || {
+            response=$(execute_llm "$system_prompt" "$final_task_prompt" "$(basename "$file")" "$ceo_context_dir") || {
                 log_error "$LLM_TYPE API エラー"
                 continue
             }
@@ -378,7 +381,8 @@ $content"
             local basename=$(basename "$file" .md)
             local output_file="$final_report_dir/${basename}-final.md"
 
-            local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a CEO.")
+            # レポート転送はコンパクトプロンプト + コンテキストなし（トークン削減）
+            local system_prompt=$(cat "$compact_prompt_file" 2>/dev/null || cat "$prompt_file" 2>/dev/null || echo "You are a CEO.")
             local task_prompt="PMからの報告を確認し、人間への最終報告を作成してください。
 
 報告ファイル: $file
@@ -389,7 +393,7 @@ $content"
             final_task_prompt=$(build_task_prompt "$content" "$task_prompt")
 
             log_info "最終報告を作成中... ($LLM_TYPE APIで処理中)"
-            response=$(execute_llm "$system_prompt" "$final_task_prompt" "$(basename "$file")") || {
+            response=$(execute_llm "$system_prompt" "$final_task_prompt" "$(basename "$file")" "") || {
                 log_error "$LLM_TYPE API エラー - 最終報告の作成に失敗"
                 continue
             }
@@ -412,7 +416,8 @@ $content"
             local basename=$(basename "$file" .md)
             local output_file="$final_report_dir/${basename}-final.md"
 
-            local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a CEO.")
+            # レポート転送はコンパクトプロンプト + コンテキストなし（トークン削減）
+            local system_prompt=$(cat "$compact_prompt_file" 2>/dev/null || cat "$prompt_file" 2>/dev/null || echo "You are a CEO.")
             local task_prompt="インターンからの調査報告を確認し、人間への最終報告を作成してください。
 内容を要約し、重要なポイントと推奨事項を明確にしてください。
 
@@ -424,7 +429,7 @@ $content"
             final_task_prompt=$(build_task_prompt "$content" "$task_prompt")
 
             log_info "最終報告を作成中... ($LLM_TYPE APIで処理中)"
-            response=$(execute_llm "$system_prompt" "$final_task_prompt" "$(basename "$file")") || {
+            response=$(execute_llm "$system_prompt" "$final_task_prompt" "$(basename "$file")" "") || {
                 log_error "$LLM_TYPE API エラー - 最終報告の作成に失敗"
                 continue
             }
@@ -449,6 +454,7 @@ run_pm() {
     local report_watch_dir="$PROJECT_DIR/shared/reports/engineers"
     local report_output_dir="$PROJECT_DIR/shared/reports/pm"
     local prompt_file="$PROJECT_DIR/prompts/pm.md"
+    local compact_prompt_file="$PROJECT_DIR/prompts/compact/pm-routing.md"
 
     validate_environment "pm" "$prompt_file"
     mkdir -p "$watch_dir" "$output_dir"/{frontend,backend,security} "$report_watch_dir"/{frontend,backend,security} "$report_output_dir"
@@ -610,7 +616,8 @@ $content"
                 local basename=$(basename "$file" .md)
                 local output_file="$report_output_dir/${basename}-pm-report.md"
 
-                local system_prompt=$(cat "$prompt_file" 2>/dev/null || echo "You are a PM.")
+                # レポート集約はコンパクトプロンプト + コンテキストなし（トークン削減）
+                local system_prompt=$(cat "$compact_prompt_file" 2>/dev/null || cat "$prompt_file" 2>/dev/null || echo "You are a PM.")
                 local task_prompt="エンジニア($role)からの報告を確認し、CEOへの進捗報告を作成してください。
 
 報告ファイル: $file
@@ -621,7 +628,7 @@ $content"
                 final_task_prompt=$(build_task_prompt "$content" "$task_prompt")
 
                 log_info "CEOへの報告を作成中..."
-                response=$(execute_llm "$system_prompt" "$final_task_prompt" "$(basename "$file")") || {
+                response=$(execute_llm "$system_prompt" "$final_task_prompt" "$(basename "$file")" "") || {
                     log_error "$LLM_TYPE API エラー"
                     continue
                 }
