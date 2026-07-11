@@ -1,21 +1,26 @@
 # agent-corp
 
-複数のAIエージェントを階層構造で連携させ、自律的に開発を行う「AI組織」を構築するためのフレームワーク。
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![YouTube](https://img.shields.io/badge/YouTube-解説動画-red.svg)](https://youtube.com/watch?v=Qxus36eijkM)
 
-## TL;DR
+tmuxで複数のAIエージェントを階層連携させ、自律的に開発を進めるフレームワーク。社長 → PM → Engineers の役割分担で、人間は要件定義と最終レビューのみに集中できる。LLM非依存 (Claude / GPT / Gemini どれでもOK)。
+
+> **EN**: Multi-agent development framework. A hierarchical AI org (CEO → PM → Engineers) coordinated via tmux and file-based messaging. LLM-agnostic — plug in Claude, GPT, Gemini, or Aider.
+
+## 1分で試す
 
 ```bash
-# 起動
+# 起動 (自動監視モード)
 ./scripts/start.sh start
 
-# 要件を送信（別ターミナル）
+# 要件を送信 (別ターミナル)
 ./scripts/msg.sh send --from human --to ceo --type requirement \
     --title "機能追加" --body "ログイン機能を実装してください"
 
-# 4分割画面で進行確認
+# 4分割画面で進行を眺める
 ./scripts/start.sh attach   # → Ctrl+b 4
 
-# 最終報告を確認
+# 最終報告を読む
 cat shared/reports/human/*.md
 ```
 
@@ -47,21 +52,11 @@ cat shared/reports/human/*.md
 - **tmux連携**: ターミナル分割で複数エージェントを同時起動・監視
 - **人間の役割最小化**: 要件定義と最終レビューのみ
 
-## AI進化の5段階（OpenAI提唱）
-
-| Level | 名称 | 説明 |
-|-------|------|------|
-| L1 | Chatbot | 対話型AI |
-| L2 | Reasoner | 推論可能なAI |
-| L3 | Agent | 自律的に行動するAI |
-| L4 | Innovator | 革新を生み出すAI |
-| L5 | Organization | **← agent-corpはここを目指す** |
-
 ## 必要要件
 
 - tmux 3.0以上
 - Claude Code (`npm install -g @anthropic-ai/claude-code`)
-- ANTHROPIC_API_KEY 環境変数の設定
+- `ANTHROPIC_API_KEY` 環境変数の設定
 
 ## クイックスタート
 
@@ -70,7 +65,7 @@ cat shared/reports/human/*.md
 git clone https://github.com/kenimo49/agent-corp.git
 cd agent-corp
 
-# セッションを起動（自動監視モード）
+# セッションを起動 (自動監視モード)
 ./scripts/start.sh start
 
 # セッションにアタッチ
@@ -78,7 +73,7 @@ cd agent-corp
 
 # 4分割オーバービュー表示: Ctrl+b → 4
 
-# 要件を送信（別ターミナルから）
+# 要件を送信 (別ターミナルから)
 ./scripts/msg.sh send --from human --to ceo --type requirement \
     --title "機能追加" --body "ログイン機能を実装してください"
 
@@ -101,17 +96,17 @@ human ──→ requirements/
               ↓                  ↑
         Engineers ───────────────┘
               ↓
-        reports/human（最終報告）
+        reports/human (最終報告)
 ```
 
 ## 起動モード
 
 | モード | コマンド | 説明 |
 |--------|----------|------|
-| claude-loop（推奨） | `start.sh start` | 自動監視・自動処理 |
-| claude | `start.sh start --llm claude` | 対話モード（手動） |
+| claude-loop (推奨) | `start.sh start` | 自動監視・自動処理 |
+| claude | `start.sh start --llm claude` | 対話モード (手動) |
 | aider | `start.sh start --llm aider` | Aider使用 |
-| none | `start.sh start --llm none` | シェルのみ（デバッグ用） |
+| none | `start.sh start --llm none` | シェルのみ (デバッグ用) |
 
 ## ディレクトリ構成
 
@@ -153,11 +148,11 @@ agent-corp/
 | スクリプト | [scripts/README.md](./scripts/README.md) | スクリプトリファレンス |
 | AI向け | [CLAUDE.md](./CLAUDE.md) | AIエージェント開発ガイド |
 
+## 参考
+
+- [YouTube解説動画 (詳細版)](https://youtube.com/watch?v=Qxus36eijkM)
+- [YouTube Shorts (30秒紹介)](https://youtube.com/shorts/vMhMWPYxLEs)
+
 ## ライセンス
 
 MIT
-
-## 参考
-
-- [YouTube解説動画](https://youtube.com/shorts/vMhMWPYxLEs)
-- [詳細解説動画](https://youtube.com/watch?v=Qxus36eijkM)
